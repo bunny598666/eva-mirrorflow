@@ -24,7 +24,7 @@
 
 | 層 | 選型 | 備註 |
 |---|---|---|
-| 框架 | Next.js 14 App Router + TypeScript **strict** | 單一 repo |
+| 框架 | Next.js 16 App Router + TypeScript **strict** + React 19 | 單一 repo。**v1.0 原訂 Next 14,2026-07-31 經指導者裁示升至 16** |
 | 樣式 | Tailwind CSS | 自建輕量元件 |
 | 編輯器 | Tiptap（ProseMirror） | Provenance Marks 依賴,不可換 |
 | 資料庫 | Supabase（PostgreSQL + RLS + pg_cron） | |
@@ -33,6 +33,14 @@
 | 部署 | Vercel（GitHub main 自動部署） | |
 | 差異比對 | diff-match-patch | |
 | 本地佇列 | IndexedDB（idb） | |
+
+### 2.1 Next 16 慣例（後續 STEP 必須遵守）
+
+BUILD_PLAN.md 撰寫時以 Next 14 為準,升版後下列寫法已變更,以本節為準：
+
+- **`params` / `searchParams` / `cookies()` / `headers()` 皆為 Promise**,必須 `await`。
+- **路由守衛寫在 `proxy.ts`**（Next 16 對 `middleware.ts` 的新命名,兩者仍相容;新檔一律用 `proxy.ts`）——STEP 2 三種角色的路由群守衛適用。
+- **ESLint 用 flat config `eslint.config.mjs`**;`next lint` 已移除,指令為 `npm run lint`（= `eslint .`）。
 
 ## 3. 資料庫（詳細 SQL 見 BUILD_PLAN.md §4）
 
