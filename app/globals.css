@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * 固定淺色主題：DNA 三色（藍／綠／橘）是研究資料的視覺呈現，
+ * 不得因作業系統深色模式而改變對比與色相。
+ */
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  color-scheme: light;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+}
