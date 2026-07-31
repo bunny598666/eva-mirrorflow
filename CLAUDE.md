@@ -129,7 +129,7 @@ supabase/migrations/
 | STEP | 內容 | 狀態 |
 |---|---|---|
 | 0 | Repo + Supabase + Vercel 初始化 | ☑ 本機骨架完成（build 過）；GitHub / Vercel 待接 |
-| 1 | Schema + RLS + append-only trigger（含 reflections） | ☐ |
+| 1 | Schema + RLS + append-only trigger（含 reflections） | ◐ migrations 001–003 與 verify-rls.ts 完成；**驗收待 Supabase 專案建立後執行** |
 | 2 | 代號+PIN 認證、班級/作業/反思題目後台 | ☐ |
 | 3 | 雙欄介面外框（平板可用） | ☐ |
 | 4 | Chat SSE + 鷹架按鈕（常開）+ token 入庫 | ☐ |

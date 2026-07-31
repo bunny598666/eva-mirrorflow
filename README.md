@@ -21,6 +21,7 @@ npm run dev
 | `npm run build` | 正式建置（每個 STEP 的驗收條件之一） |
 | `npm run typecheck` | TypeScript strict 檢查 |
 | `npm run lint` | ESLint（含禁用 `any`） |
+| `npm run verify:rls` | STEP 1 驗收：RLS 與 append-only 鐵則驗證（單一 transaction，結尾一律 ROLLBACK，零殘留） |
 
 ## 安全
 
