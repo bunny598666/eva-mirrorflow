@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "verify:rls": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-rls.ts"
+    "verify:rls": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-rls.ts",
+    "gen:secret": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/gen-secret.ts",
+    "create:participant": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/create-participant.ts",
+    "verify:step2": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-step2.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -17,12 +20,14 @@
     "@tiptap/pm": "^3.29.2",
     "@tiptap/react": "^3.29.2",
     "@tiptap/starter-kit": "^3.29.2",
+    "bcryptjs": "^3.0.3",
     "diff-match-patch": "^1.0.5",
     "idb": "^8.0.3",
     "next": "^16.2.12",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@types/diff-match-patch": "^1.0.36",
