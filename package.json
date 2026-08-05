@@ -11,10 +11,10 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "verify:rls": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-rls.ts",
-    "gen:secret": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/gen-secret.ts",
-    "create:participant": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/create-participant.ts",
-    "verify:step2": "node --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-step2.ts"
+    "verify:rls": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-rls.ts",
+    "gen:secret": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/gen-secret.ts",
+    "create:participant": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env.local --experimental-strip-types scripts/create-participant.ts",
+    "verify:step2": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-step2.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
