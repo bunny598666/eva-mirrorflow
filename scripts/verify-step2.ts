@@ -248,7 +248,9 @@ async function main(): Promise<void> {
     }
 
     await test("繞過 API 直接改資料庫，仍被 004 的 trigger 擋下", async () => {
-      await db.query("savepoint sp");
+      // 顯式開 transaction 再回捲：本腳本其餘部分走 autocommit，
+      // 沒有外層 transaction 時 SAVEPOINT 不能用。
+      await db.query("begin");
       let blocked = false;
       try {
         const res = await db.query(
@@ -259,7 +261,7 @@ async function main(): Promise<void> {
       } catch {
         blocked = true;
       }
-      await db.query("rollback to savepoint sp");
+      await db.query("rollback");
       assert(blocked, "資料庫層必須擋下既有版本的修改");
     });
 
