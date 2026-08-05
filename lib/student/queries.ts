@@ -1,0 +1,85 @@
+/**
+ * 學生端的伺服器讀取。走 service_role，因此每一個函式都必須自己把
+ * participant_id 綁死——學生只能看到自己的東西（CLAUDE.md §4.4）。
+ */
+import "server-only";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import type { SessionClaims } from "@/lib/auth/types";
+
+export type AssignmentSummary = {
+  id: string;
+  title: string;
+  instructions: string;
+  order_no: number;
+};
+
+export type WritingSession = {
+  id: string;
+  participant_id: string;
+  assignment_id: string;
+  started_at: string;
+  submitted_at: string | null;
+  status: "active" | "submitted" | "reflected";
+};
+
+export type WritingContext = {
+  session: WritingSession;
+  assignment: AssignmentSummary;
+};
+
+export async function listAssignmentsWithProgress(
+  session: SessionClaims,
+): Promise<{ assignment: AssignmentSummary; session: WritingSession | null }[]> {
+  const db = supabaseAdmin();
+
+  const { data: assignments, error: aErr } = await db
+    .from("assignments")
+    .select("id, title, instructions, order_no")
+    .order("order_no");
+  if (aErr) throw new Error(aErr.message);
+
+  const { data: sessions, error: sErr } = await db
+    .from("sessions")
+    .select("id, participant_id, assignment_id, started_at, submitted_at, status")
+    .eq("participant_id", session.participant_id);
+  if (sErr) throw new Error(sErr.message);
+
+  const byAssignment = new Map<string, WritingSession>();
+  for (const row of (sessions ?? []) as WritingSession[]) {
+    byAssignment.set(row.assignment_id, row);
+  }
+
+  return ((assignments ?? []) as AssignmentSummary[]).map((assignment) => ({
+    assignment,
+    session: byAssignment.get(assignment.id) ?? null,
+  }));
+}
+
+/**
+ * 取得寫作頁所需的場次與作業。找不到、或這個場次不是本人的，一律回 null——
+ * 呼叫端據此 notFound()，不透露「這個 id 存在但不是你的」。
+ */
+export async function loadWritingContext(
+  sessionId: string,
+  claims: SessionClaims,
+): Promise<WritingContext | null> {
+  const db = supabaseAdmin();
+
+  const { data: row, error } = await db
+    .from("sessions")
+    .select("id, participant_id, assignment_id, started_at, submitted_at, status")
+    .eq("id", sessionId)
+    .maybeSingle<WritingSession>();
+  if (error) throw new Error(error.message);
+  if (!row || row.participant_id !== claims.participant_id) return null;
+
+  const { data: assignment, error: aErr } = await db
+    .from("assignments")
+    .select("id, title, instructions, order_no")
+    .eq("id", row.assignment_id)
+    .maybeSingle<AssignmentSummary>();
+  if (aErr) throw new Error(aErr.message);
+  if (!assignment) return null;
+
+  return { session: row, assignment };
+}

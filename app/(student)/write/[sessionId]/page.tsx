@@ -1,13 +1,27 @@
-// 雙欄寫作頁（左 Chat／右 Tiptap）—— 版面 STEP 3、Chat STEP 4、事件記錄 STEP 5
+import { notFound } from "next/navigation";
+import { requireRole } from "@/lib/auth/session";
+import { loadWritingContext } from "@/lib/student/queries";
+import { writingMinutes } from "@/lib/student/config";
+import WriteWorkspace from "./WriteWorkspace";
 
 type Params = { params: Promise<{ sessionId: string }> };
 
 export default async function WritePage({ params }: Params) {
   const { sessionId } = await params;
+  const claims = await requireRole("student");
+
+  // 場次不存在、或不是本人的，一律 404——不透露「這個 id 存在但不是你的」。
+  const context = await loadWritingContext(sessionId, claims);
+  if (!context) notFound();
+
   return (
-    <main className="p-8">
-      <h1 className="text-2xl font-bold">寫作</h1>
-      <p className="mt-2 text-neutral-600">場次 {sessionId}</p>
-    </main>
+    <WriteWorkspace
+      sessionId={context.session.id}
+      title={context.assignment.title}
+      instructions={context.assignment.instructions}
+      orderNo={context.assignment.order_no}
+      startedAt={context.session.started_at}
+      minutes={writingMinutes()}
+    />
   );
 }

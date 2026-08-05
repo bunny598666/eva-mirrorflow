@@ -131,7 +131,7 @@ supabase/migrations/
 | 0 | Repo + Supabase + Vercel 初始化 | ☑ 本機骨架完成（build 過）；GitHub / Vercel 待接 |
 | 1 | Schema + RLS + append-only trigger（含 reflections） | ☑ migrations 001–004；verify-rls.ts 30/30 全綠（2026-08-05, dev 專案） |
 | 2 | 代號+PIN 認證、班級/作業/反思題目後台 | ☑ migration 005；verify-step2.ts 21/21 全綠 + UI 層目視確認（2026-08-05） |
-| 3 | 雙欄介面外框（平板可用） | ☐ |
+| 3 | 雙欄介面外框（平板可用） | ◐ 版面與 a11y 自動檢查全過（768×1024 與 1280×800 皆零問題）；**Lighthouse 分數待你在 Chrome DevTools 實跑、真實 iPad 待你實測** |
 | 4 | Chat SSE + 鷹架按鈕（常開）+ token 入庫 | ☐ |
 | 5 | 事件記錄器 + IndexedDB 佇列 + 斷線續傳 | ☐ |
 | 6 | 複製/貼上攔截 + Provenance Marks | ☐ |
