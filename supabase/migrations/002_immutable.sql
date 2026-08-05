@@ -12,14 +12,17 @@ begin
 end
 $$;
 
+drop trigger if exists events_immutable on events;
 create trigger events_immutable
   before update or delete on events
   for each row execute function forbid_mutation();
 
+drop trigger if exists chat_immutable on chat_messages;
 create trigger chat_immutable
   before update or delete on chat_messages
   for each row execute function forbid_mutation();
 
+drop trigger if exists reflections_immutable on reflections;
 create trigger reflections_immutable
   before update or delete on reflections
   for each row execute function forbid_mutation();

@@ -111,21 +111,25 @@ grant select (id, code, class_id, role, consent_at, guardian_consent_at)
 -- ─────────────────────────────────────────────────────────────────────
 -- classes：只看得到自己那班
 -- ─────────────────────────────────────────────────────────────────────
+drop policy if exists classes_read_own on classes;
 create policy classes_read_own on classes for select to authenticated
   using (id = app.class_id());
 
 -- ─────────────────────────────────────────────────────────────────────
 -- participants：學生只看自己；教師看該班（pin_hash 已於上方以欄位權限排除）
 -- ─────────────────────────────────────────────────────────────────────
+drop policy if exists participants_read_self on participants;
 create policy participants_read_self on participants for select to authenticated
   using (id = app.participant_id());
 
+drop policy if exists participants_read_class on participants;
 create policy participants_read_class on participants for select to authenticated
   using (app.app_role() = 'teacher' and class_id = app.class_id());
 
 -- ─────────────────────────────────────────────────────────────────────
 -- assignments：三期作業全域唯一（order_no unique），登入者皆可讀
 -- ─────────────────────────────────────────────────────────────────────
+drop policy if exists assignments_read on assignments;
 create policy assignments_read on assignments for select to authenticated
   using (true);
 
@@ -134,15 +138,18 @@ create policy assignments_read on assignments for select to authenticated
 -- ＝ 版本凍結的第一層。新增版本只能經伺服器端 service_role（STEP 2 教師後台），
 --    UI 不提供編輯是第二層。
 -- ─────────────────────────────────────────────────────────────────────
+drop policy if exists reflection_prompts_read on reflection_prompts;
 create policy reflection_prompts_read on reflection_prompts for select to authenticated
   using (true);
 
 -- ─────────────────────────────────────────────────────────────────────
 -- sessions：唯一允許 UPDATE 的流程性資料表
 -- ─────────────────────────────────────────────────────────────────────
+drop policy if exists sessions_read_own on sessions;
 create policy sessions_read_own on sessions for select to authenticated
   using (participant_id = app.participant_id());
 
+drop policy if exists sessions_read_class on sessions;
 create policy sessions_read_class on sessions for select to authenticated
   using (
     app.app_role() = 'teacher'
@@ -151,9 +158,11 @@ create policy sessions_read_class on sessions for select to authenticated
     )
   );
 
+drop policy if exists sessions_insert_own on sessions;
 create policy sessions_insert_own on sessions for insert to authenticated
   with check (participant_id = app.participant_id());
 
+drop policy if exists sessions_update_own on sessions;
 create policy sessions_update_own on sessions for update to authenticated
   using (participant_id = app.participant_id())
   with check (participant_id = app.participant_id());
@@ -183,6 +192,7 @@ begin
 end
 $$;
 
+drop trigger if exists sessions_guard_update on sessions;
 create trigger sessions_guard_update
   before update on sessions
   for each row execute function guard_session_update();
@@ -191,24 +201,33 @@ create trigger sessions_guard_update
 -- chat_messages / events / snapshots：學生寫自己的、讀自己的；教師唯讀該班
 -- （UPDATE / DELETE 由 002 的 trigger 擋，這裡也不給政策）
 -- ─────────────────────────────────────────────────────────────────────
+drop policy if exists chat_read_own on chat_messages;
 create policy chat_read_own on chat_messages for select to authenticated
   using (app.owns_session(session_id));
+drop policy if exists chat_read_class on chat_messages;
 create policy chat_read_class on chat_messages for select to authenticated
   using (app.teaches_session(session_id));
+drop policy if exists chat_insert_own on chat_messages;
 create policy chat_insert_own on chat_messages for insert to authenticated
   with check (app.owns_session(session_id));
 
+drop policy if exists events_read_own on events;
 create policy events_read_own on events for select to authenticated
   using (app.owns_session(session_id));
+drop policy if exists events_read_class on events;
 create policy events_read_class on events for select to authenticated
   using (app.teaches_session(session_id));
+drop policy if exists events_insert_own on events;
 create policy events_insert_own on events for insert to authenticated
   with check (app.owns_session(session_id));
 
+drop policy if exists snapshots_read_own on snapshots;
 create policy snapshots_read_own on snapshots for select to authenticated
   using (app.owns_session(session_id));
+drop policy if exists snapshots_read_class on snapshots;
 create policy snapshots_read_class on snapshots for select to authenticated
   using (app.teaches_session(session_id));
+drop policy if exists snapshots_insert_own on snapshots;
 create policy snapshots_insert_own on snapshots for insert to authenticated
   with check (app.owns_session(session_id));
 
@@ -218,9 +237,11 @@ create policy snapshots_insert_own on snapshots for insert to authenticated
 -- 會污染介入——因此連自己的 quadrant 都不給看。
 -- 沒有 insert 政策：DNA 與象限座標一律由伺服器端 service_role 於 submit 時寫入。
 -- ─────────────────────────────────────────────────────────────────────
+drop policy if exists student_read_own_dna on analyses;
 create policy student_read_own_dna on analyses for select to authenticated
   using (kind = 'dna' and app.owns_session(session_id));
 
+drop policy if exists analyses_read_class on analyses;
 create policy analyses_read_class on analyses for select to authenticated
   using (app.teaches_session(session_id));
 
@@ -228,10 +249,13 @@ create policy analyses_read_class on analyses for select to authenticated
 -- ★reflections：學生寫自己的、讀自己的；教師唯讀該班
 -- 無 update / delete 政策，002 的 trigger 再擋一層。
 -- ─────────────────────────────────────────────────────────────────────
+drop policy if exists reflections_read_own on reflections;
 create policy reflections_read_own on reflections for select to authenticated
   using (app.owns_session(session_id));
+drop policy if exists reflections_read_class on reflections;
 create policy reflections_read_class on reflections for select to authenticated
   using (app.teaches_session(session_id));
+drop policy if exists reflections_insert_own on reflections;
 create policy reflections_insert_own on reflections for insert to authenticated
   with check (app.owns_session(session_id));
 

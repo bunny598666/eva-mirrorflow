@@ -16,6 +16,7 @@ begin
 end
 $$;
 
+drop trigger if exists reflection_prompts_frozen on reflection_prompts;
 create trigger reflection_prompts_frozen
   before update or delete on reflection_prompts
   for each row execute function forbid_prompt_version_mutation();
