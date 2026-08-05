@@ -38,22 +38,23 @@ type Fixtures = {
 
 const results: { name: string; ok: boolean; detail: string }[] = [];
 
-function record(name: string, ok: boolean, detail: string): void {
+function record(name: string, ok: boolean, detail: string, note = ""): void {
   results.push({ name, ok, detail });
   const mark = ok ? "[32m✓[0m" : "[31m✗[0m";
-  console.log(`${mark} ${name}${ok ? "" : `\n    → ${detail}`}`);
+  const suffix = ok ? (note ? `\n    ↳ ${note}` : "") : `\n    → ${detail}`;
+  console.log(`${mark} ${name}${suffix}`);
 }
 
 /** 每個測項獨立 savepoint：預期失敗的操作會讓 transaction 進入 aborted 狀態，必須回捲才能續跑。 */
 async function test(
   client: Client,
   name: string,
-  fn: () => Promise<void>,
+  fn: () => Promise<void | string>,
 ): Promise<void> {
   await client.query("savepoint tc");
   try {
-    await fn();
-    record(name, true, "");
+    const note = await fn();
+    record(name, true, "", typeof note === "string" ? note : "");
   } catch (err) {
     record(name, false, err instanceof Error ? err.message : String(err));
   } finally {
@@ -99,6 +100,37 @@ async function assertRejected(
   await client.query("rollback to savepoint expect_fail");
   assert(rejected, `${message}（該操作竟然成功了）`);
   if (process.env.VERBOSE === "1") console.log(`      拒絕理由：${detail}`);
+}
+
+/**
+ * 斷言某個寫入操作「動不到任何資料」。
+ *
+ * 與 assertRejected 的差別在於 PostgreSQL 的兩種擋法：
+ *   - 拋例外        —— trigger、WITH CHECK 違反、權限不足、UNIQUE 衝突走這條
+ *   - 靜靜影響 0 列 —— 表上沒有對應的 UPDATE / DELETE 政策時走這條，不會報錯
+ * 後者同樣是「擋下來了」，資料完全沒動，但接不到例外。凡是 UPDATE / DELETE
+ * 的封鎖測試都必須用本函式，否則會誤判成失敗。
+ *
+ * 回傳實際擋下它的機制，讓輸出看得出防線是哪一層在生效。
+ */
+async function assertBlocked(
+  client: Client,
+  sql: string,
+  params: unknown[],
+  message: string,
+): Promise<string> {
+  await client.query("savepoint expect_blocked");
+  let mechanism = "";
+  try {
+    const res = await client.query(sql, params);
+    if (res.rowCount === 0) mechanism = "RLS：無對應政策，影響 0 列";
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    mechanism = `拋出例外：${raw.split("\n")[0]}`;
+  }
+  await client.query("rollback to savepoint expect_blocked");
+  assert(mechanism !== "", `${message}（該操作實際改動了資料列）`);
+  return `擋下方式 — ${mechanism}`;
 }
 
 async function countAs(
@@ -308,9 +340,9 @@ async function main(): Promise<void> {
 
     console.log("\n── (b) append-only：三表不可 UPDATE / DELETE ─────────");
 
-    await test(client, "學生對 reflections 執行 UPDATE 被拒", async () => {
+    await test(client, "學生對 reflections 執行 UPDATE 動不到資料", async () => {
       await as(client, studentA1);
-      await assertRejected(
+      return await assertBlocked(
         client,
         `update reflections set answers = '[{"question_id":"q1","text":"竄改"}]' where session_id = $1`,
         [f.sessionA1],
@@ -318,9 +350,9 @@ async function main(): Promise<void> {
       );
     });
 
-    await test(client, "學生對 reflections 執行 DELETE 被拒", async () => {
+    await test(client, "學生對 reflections 執行 DELETE 動不到資料", async () => {
       await as(client, studentA1);
-      await assertRejected(
+      return await assertBlocked(
         client,
         `delete from reflections where session_id = $1`,
         [f.sessionA1],
@@ -428,11 +460,36 @@ async function main(): Promise<void> {
 
     await test(client, "學生不可修改既有 reflection_prompts 版本", async () => {
       await as(client, studentA1);
-      await assertRejected(
+      return await assertBlocked(
         client,
         `update reflection_prompts set questions = '[]' where version = 'verify-v1'`,
         [],
         "版本凍結：既有版本不可修改",
+      );
+    });
+
+    await test(client, "連 superuser 也不能修改既有 prompt 版本", async () => {
+      return await assertBlocked(
+        client,
+        `update reflection_prompts set questions = '[]' where version = 'verify-v1'`,
+        [],
+        "版本凍結必須連 service_role 都擋——三期題目同版是鐵則",
+      );
+    });
+
+    await test(client, "連 superuser 也不能刪除既有 prompt 版本", async () => {
+      return await assertBlocked(
+        client,
+        `delete from reflection_prompts where version = 'verify-v1'`,
+        [],
+        "既有版本不可刪除",
+      );
+    });
+
+    await test(client, "仍可新增 prompt 版本（凍結不等於封死）", async () => {
+      await client.query(
+        `insert into reflection_prompts (version, questions)
+         values ('verify-v2', '[{"id":"q1","text":"新版題目","min_chars":30}]')`,
       );
     });
 
