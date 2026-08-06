@@ -23,6 +23,7 @@ npm run dev
 | `npm run lint` | ESLint（含禁用 `any`） |
 | `npm run verify:rls` | STEP 1 驗收：RLS 與 append-only 鐵則驗證（單一 transaction，結尾一律 ROLLBACK，零殘留） |
 | `npm run verify:step2` | STEP 2 驗收：認證、路由守衛、反思題目版本凍結（需另開終端機跑 `npm run dev`） |
+| `npm run verify:step4` | STEP 4 驗收：SSE 串流、半截回覆不入庫、鷹架關聯（需以 `AI_PROVIDER=mock npm run dev` 啟動） |
 | `npm run gen:secret` | 產生 `AUTH_JWT_SECRET` |
 | `npm run create:participant -- --code R-01 --role researcher` | 建立帳號。PIN 只印一次，資料庫只存雜湊 |
 

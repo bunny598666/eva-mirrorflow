@@ -7,6 +7,8 @@ import EditorPane from "./EditorPane";
 import RemainingTime from "./RemainingTime";
 import SaveStatus, { type SaveState } from "./SaveStatus";
 import SplitHandle from "./SplitHandle";
+import type { ScaffoldButton } from "@/lib/scaffold/types";
+import type { ChatHistoryItem } from "@/lib/student/queries";
 
 type Pane = "chat" | "editor";
 
@@ -28,6 +30,9 @@ export default function WriteWorkspace({
   orderNo,
   startedAt,
   minutes,
+  scaffolds,
+  history,
+  submitted,
 }: {
   sessionId: string;
   title: string;
@@ -35,6 +40,9 @@ export default function WriteWorkspace({
   orderNo: number;
   startedAt: string;
   minutes: number;
+  scaffolds: ScaffoldButton[];
+  history: ChatHistoryItem[];
+  submitted: boolean;
 }) {
   const [percent, setPercent] = useState(40);
   const [pane, setPane] = useState<Pane>("editor");
@@ -89,7 +97,12 @@ export default function WriteWorkspace({
           className={`${pane === "chat" ? "flex" : "hidden"} min-h-0 w-full flex-1 lg:flex lg:w-[var(--split)] lg:flex-none`}
         >
           <div className="min-h-0 w-full">
-            <ChatPane />
+            <ChatPane
+              sessionId={sessionId}
+              scaffolds={scaffolds}
+              history={history}
+              disabled={submitted}
+            />
           </div>
         </div>
 

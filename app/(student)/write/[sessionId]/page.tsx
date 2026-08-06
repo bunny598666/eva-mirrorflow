@@ -22,6 +22,9 @@ export default async function WritePage({ params }: Params) {
       orderNo={context.assignment.order_no}
       startedAt={context.session.started_at}
       minutes={writingMinutes()}
+      scaffolds={context.scaffolds}
+      history={context.history}
+      submitted={context.session.status !== "active"}
     />
   );
 }

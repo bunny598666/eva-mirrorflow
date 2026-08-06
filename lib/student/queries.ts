@@ -4,6 +4,7 @@
  */
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { parseScaffoldButtons, type ScaffoldButton } from "@/lib/scaffold/types";
 import type { SessionClaims } from "@/lib/auth/types";
 
 export type AssignmentSummary = {
@@ -11,6 +12,11 @@ export type AssignmentSummary = {
   title: string;
   instructions: string;
   order_no: number;
+};
+
+export type ChatHistoryItem = {
+  role: "user" | "assistant";
+  content: string;
 };
 
 export type WritingSession = {
@@ -25,6 +31,8 @@ export type WritingSession = {
 export type WritingContext = {
   session: WritingSession;
   assignment: AssignmentSummary;
+  scaffolds: ScaffoldButton[];
+  history: ChatHistoryItem[];
 };
 
 export async function listAssignmentsWithProgress(
@@ -75,11 +83,29 @@ export async function loadWritingContext(
 
   const { data: assignment, error: aErr } = await db
     .from("assignments")
-    .select("id, title, instructions, order_no")
+    .select("id, title, instructions, order_no, scaffold_buttons")
     .eq("id", row.assignment_id)
-    .maybeSingle<AssignmentSummary>();
+    .maybeSingle<AssignmentSummary & { scaffold_buttons: unknown }>();
   if (aErr) throw new Error(aErr.message);
   if (!assignment) return null;
 
-  return { session: row, assignment };
+  const { data: history, error: hErr } = await db
+    .from("chat_messages")
+    .select("role, content")
+    .eq("session_id", sessionId)
+    .order("ts", { ascending: true });
+  if (hErr) throw new Error(hErr.message);
+
+  return {
+    session: row,
+    assignment: {
+      id: assignment.id,
+      title: assignment.title,
+      instructions: assignment.instructions,
+      order_no: assignment.order_no,
+    },
+    // 鷹架全程開啟（CLAUDE.md §4.6），沒有開關可判斷。
+    scaffolds: parseScaffoldButtons(assignment.scaffold_buttons),
+    history: (history ?? []) as ChatHistoryItem[],
+  };
 }

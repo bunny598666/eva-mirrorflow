@@ -14,7 +14,8 @@
     "verify:rls": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-rls.ts",
     "gen:secret": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/gen-secret.ts",
     "create:participant": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env.local --experimental-strip-types scripts/create-participant.ts",
-    "verify:step2": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-step2.ts"
+    "verify:step2": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-step2.ts",
+    "verify:step4": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-step4.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
