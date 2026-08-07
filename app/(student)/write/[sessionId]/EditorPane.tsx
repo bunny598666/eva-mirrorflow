@@ -4,14 +4,18 @@ import { useEffect, useRef } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { startCapture, type CaptureHandle } from "@/lib/events/capture";
+import { emitEvent } from "@/lib/events/queue";
+import { PROVENANCE_EXTENSIONS } from "@/lib/editor/marks";
+import { decidePaste } from "@/lib/editor/paste";
+import { hydrateCopySources } from "@/lib/editor/clipboard";
 import type { SaveState } from "./SaveStatus";
 
 /**
  * Tiptap 編輯器。
  *
  * STEP 3 做外框與本機暫存；STEP 5 接上事件擷取（keystroke 打包、大段刪除、
- * 停頓、焦點切換）。Provenance Marks 於 STEP 6、快照與回放於 STEP 7 接上，
- * 都掛在同一個 editor 實例上。
+ * 停頓、焦點切換）；STEP 6 接上貼上攔截與 Provenance Marks。快照與回放於
+ * STEP 7 接上，都掛在同一個 editor 實例上。
  *
  * immediatelyRender: false 是 SSR 必要設定，否則伺服器與用戶端渲染不一致。
  */
@@ -29,7 +33,7 @@ export default function EditorPane({
   const capture = useRef<CaptureHandle | null>(null);
 
   const editor = useEditor({
-    extensions: [StarterKit],
+    extensions: [StarterKit, ...PROVENANCE_EXTENSIONS],
     immediatelyRender: false,
     content: "",
     editorProps: {
@@ -39,6 +43,28 @@ export default function EditorPane({
         "aria-label": "文章編輯區",
         role: "textbox",
         "aria-multiline": "true",
+      },
+
+      /**
+       * 貼上攔截（STEP 6）。整段接管貼上，只取純文字，依來源掛 mark。
+       * 判斷邏輯在 lib/editor/paste.ts（可離線驗證），這裡只負責接線。
+       *
+       * 這一步是整個 DNA 三色歸因的地基：沒有它，最終稿裡「AI 寫的」與
+       * 「自己寫的」就完全分不出來。
+       */
+      handlePaste: (view, event) => {
+        const outcome = decidePaste(
+          view.state,
+          event.clipboardData?.getData("text/plain") ?? "",
+          event.clipboardData?.getData("text/html") ?? "",
+        );
+        if (!outcome) return false;
+
+        void emitEvent(sessionId, "paste", outcome.payload);
+        if (!outcome.handled || !outcome.tr) return false;
+
+        view.dispatch(outcome.tr);
+        return true;
       },
     },
     onUpdate: ({ editor: instance }) => {
@@ -59,6 +85,11 @@ export default function EditorPane({
 
   // 讀回本機暫存稿，然後才啟動事件擷取——順序很重要：
   // 若先啟動擷取，回復草稿會被當成「學生剛剛打了一整篇」記成一筆巨大的 keystroke_batch。
+  // 把先前的複製紀錄灌回記憶體。學生重整頁面後再貼上，仍認得出那是 AI 的話。
+  useEffect(() => {
+    void hydrateCopySources(sessionId);
+  }, [sessionId]);
+
   useEffect(() => {
     if (!editor) return;
 

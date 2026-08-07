@@ -65,13 +65,17 @@ async function nextSeq(sessionId: string): Promise<number> {
 /**
  * 記錄一個事件。只負責落地，不負責送出——送出由 flusher 每 5 秒批次處理。
  * 永遠不丟例外：事件記錄失敗不該讓學生的寫作動作卡住。
+ *
+ * 回傳這筆事件拿到的 client_seq（失敗回 null）。STEP 6 的 aiOrigin mark 需要它
+ * 來指向那筆 copy 事件——(session_id, client_seq) 是事件的唯一鍵，而 DB 的
+ * bigint id 用戶端拿不到（批次送出的回應不帶 id，離線時更是還沒有 id）。
  */
 export async function emitEvent(
   sessionId: string,
   type: EventType,
   payload: Record<string, unknown> = {},
-): Promise<void> {
-  if (typeof window === "undefined") return;
+): Promise<number | null> {
+  if (typeof window === "undefined") return null;
   try {
     const event: PendingEvent = {
       session_id: sessionId,
@@ -82,12 +86,14 @@ export async function emitEvent(
     };
     const db = await database();
     await db.put(STORE_EVENTS, event);
+    return event.client_seq;
   } catch (err) {
     // IndexedDB 不可用（無痕模式、儲存空間滿）。記進 console 供除錯，
     // 但不影響學生繼續寫作。
     console.error("[events] 無法寫入本機佇列", {
       message: err instanceof Error ? err.message : String(err),
     });
+    return null;
   }
 }
 

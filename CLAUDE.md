@@ -134,7 +134,7 @@ supabase/migrations/
 | 3 | 雙欄介面外框（平板可用） | ◐ 版面與 a11y 自動檢查全過（768×1024 與 1280×800 皆零問題）；**Lighthouse 分數待你在 Chrome DevTools 實跑、真實 iPad 待你實測** |
 | 4 | Chat SSE + 鷹架按鈕（常開）+ token 入庫 | ◐ verify-step4.ts 12/12 全綠（AI_PROVIDER=mock）+ UI 實測；**真實 Anthropic API 路徑待金鑰實測** |
 | 5 | 事件記錄器 + IndexedDB 佇列 + 斷線續傳 | ☑ 瀏覽器實測斷網 30 秒→重連零遺漏零重複；verify-step5.ts 事件流完整（2026-08-07） |
-| 6 | 複製/貼上攔截 + Provenance Marks | ☐ |
+| 6 | 複製/貼上攔截 + Provenance Marks | ☑ verify-step6.ts 55/55 全綠（無需 DB／瀏覽器／AI）+ 瀏覽器實測複製→貼上→重整→再貼上（2026-08-07） |
 | 7 | 快照 + 回放引擎（完整版+學生簡化版） | ☐ |
 | 8 | DNA 歸因 + 條碼（研究者版+學生白話版） | ☐ |
 | 9 | ★鏡子迴圈:mirror 頁 + 反思表單 + recap 摘要卡 | ☐ |

@@ -14,6 +14,10 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
+    // scripts/ 底下的驗收腳本用 node --experimental-strip-types 直接跑 .ts，
+    // ESM 規定要寫完整副檔名。允許它，驗收腳本才能 import 真正的 lib/ 程式碼
+    // 而不是複製一份（複製出來的副本驗不到正式程式碼的行為）。
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "incremental": true,
     "plugins": [

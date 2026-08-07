@@ -25,6 +25,7 @@ npm run dev
 | `npm run verify:step2` | STEP 2 驗收：認證、路由守衛、反思題目版本凍結（需另開終端機跑 `npm run dev`） |
 | `npm run verify:step4` | STEP 4 驗收：SSE 串流、半截回覆不入庫、鷹架關聯（需以 `AI_PROVIDER=mock npm run dev` 啟動） |
 | `npm run verify:step5 -- --session <id>` | 事件流完整性：序號連續、無重複、型別合法、時間單調 |
+| `npm run verify:step6` | STEP 6 驗收：Provenance Marks。不需 DB／瀏覽器／AI，直接跑得動 |
 
 ### STEP 5 斷線續傳的手動驗收程序
 
@@ -40,6 +41,20 @@ npm run dev
 > `verify-step4.ts` 的冪等測試會刻意寫入 `client_seq=99`，那些測試場次
 > （S4-A / S4-B）會被報成序號缺口。那是測試殘留而非真的遺漏——
 > events 是 append-only 刪不掉。看真實場次即可。
+
+### STEP 6 的瀏覽器實測程序
+
+`npm run verify:step6` 已經驗掉全部判定邏輯（用真的 ProseMirror schema）。
+剩下「剪貼簿 → 事件 → mark」這條線需要真瀏覽器：
+
+1. `AI_PROVIDER=mock npm run dev`
+2. 學生登入 → 開始寫作 → 在對話欄問一個問題
+3. 用滑鼠選取 AI 回覆的一段，Ctrl+C
+4. 到文章欄 Ctrl+V，接著**繼續往下打字**
+5. F12 → Elements，檢查貼上那段被包在
+   `<span data-mf-origin="ai" data-mf-message-id="…" data-mf-src-start="…">` 裡，
+   而**後面自己打的字不在那個 span 裡**（這一點錯了，DNA 條碼就全錯）
+6. 重整頁面再貼一次同一段，仍應判成 `data-mf-origin="ai"`
 | `npm run gen:secret` | 產生 `AUTH_JWT_SECRET` |
 | `npm run create:participant -- --code R-01 --role researcher` | 建立帳號。PIN 只印一次，資料庫只存雜湊 |
 

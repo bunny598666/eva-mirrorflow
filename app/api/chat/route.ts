@@ -148,19 +148,26 @@ export async function POST(request: Request): Promise<Response> {
         // usage 只在串流正常結束時 resolve；中斷則 reject 並跳到 catch。
         const usage = await stream.usage;
 
-        const { error } = await db.from("chat_messages").insert({
-          session_id: sessionId,
-          role: "assistant",
-          content: full,
-          input_tokens: usage.inputTokens,
-          output_tokens: usage.outputTokens,
-        });
+        // 回傳 id：STEP 6 的 aiOrigin mark 要用它指回這則訊息，
+        // STEP 8 才能拿原文算相似度。沒有 id 就只剩「某則 AI 回覆」，對不回去。
+        const { data: inserted, error } = await db
+          .from("chat_messages")
+          .insert({
+            session_id: sessionId,
+            role: "assistant",
+            content: full,
+            input_tokens: usage.inputTokens,
+            output_tokens: usage.outputTokens,
+          })
+          .select("id")
+          .single<{ id: string }>();
         if (error) throw new Error(error.message);
 
         controller.enqueue(
           encoder.encode(
             sse({
               type: "done",
+              message_id: inserted?.id ?? null,
               input_tokens: usage.inputTokens,
               output_tokens: usage.outputTokens,
             }),

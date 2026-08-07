@@ -15,6 +15,8 @@ export type AssignmentSummary = {
 };
 
 export type ChatHistoryItem = {
+  /** chat_messages.id。aiOrigin mark 靠它指回被複製的那則 AI 回覆（STEP 6）。 */
+  id: string;
   role: "user" | "assistant";
   content: string;
 };
@@ -91,7 +93,7 @@ export async function loadWritingContext(
 
   const { data: history, error: hErr } = await db
     .from("chat_messages")
-    .select("role, content")
+    .select("id, role, content")
     .eq("session_id", sessionId)
     .order("ts", { ascending: true });
   if (hErr) throw new Error(hErr.message);
