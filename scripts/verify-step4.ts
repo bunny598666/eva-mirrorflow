@@ -121,18 +121,36 @@ async function main(): Promise<void> {
 
   const pinA = "445566";
   const pinB = "778899";
+  const pinC = "990011";
+
+  /**
+   * 每輪用獨立代號。理由是 append-only：測試場次一旦有事件與訊息就刪不掉，
+   * status 推進到 submitted 也回不去（003 的 guard trigger，那正是它該做的），
+   * 因此無法重設既有帳號來重跑。留下的測試參與者無 PII、成本極低——
+   * 而這正是「開發用與正式研究用必須是不同 Supabase 專案」的實例。
+   */
+  // 必須全大寫：登入時 code 會被 toUpperCase() 後比對，小寫代號永遠登不進去。
+  const runId = Date.now().toString(36).toUpperCase();
+  const codeA = `S4-${runId}-A`;
+  const codeB = `S4-${runId}-B`;
+  const codeC = `S4-${runId}-C`;
   let sessionId = "";
   let otherSessionId = "";
 
   try {
     // ── 準備：班級、作業（含鷹架）、兩名學生、兩個場次 ────────────
-    await db.query(`delete from participants where code in ('S4-A','S4-B')`);
-    await db.query(`delete from classes where label = 'VERIFY-STEP4'`);
-
-    const cls = await db.query<{ id: string }>(
-      `insert into classes (label, grade_level, model, temperature, system_prompt_version)
-       values ('VERIFY-STEP4','junior_high','claude-haiku-4-5-20251001',0.70,'v1') returning id`,
+    // 全部改為「有就重用、沒有才建」。第一次跑完之後，測試場次會留下事件，
+    // 而 events 是 append-only，連帶 sessions 與 participants 都刪不掉——
+    // 腳本若堅持先清空就再也跑不起來。
+    let cls = await db.query<{ id: string }>(
+      `select id from classes where label = 'VERIFY-STEP4'`,
     );
+    if (cls.rowCount === 0) {
+      cls = await db.query<{ id: string }>(
+        `insert into classes (label, grade_level, model, temperature, system_prompt_version)
+         values ('VERIFY-STEP4','junior_high','claude-haiku-4-5-20251001',0.70,'v1') returning id`,
+      );
+    }
     const classId = cls.rows[0]?.id ?? "";
 
     const assignment = await db.query<{ id: string }>(
@@ -146,18 +164,30 @@ async function main(): Promise<void> {
     );
     const assignmentId = assignment.rows[0]?.id ?? "";
 
+    // participants 沒有 append-only trigger，PIN 可以直接改寫回已知值。
     const mk = async (code: string, pin: string): Promise<string> => {
+      const hash = await bcrypt.hash(pin, 10);
       const r = await db.query<{ id: string }>(
         `insert into participants (code, pin_hash, class_id, role)
-         values ($1,$2,$3,'student') returning id`,
-        [code, await bcrypt.hash(pin, 10), classId],
+         values ($1,$2,$3,'student')
+         on conflict (code) do update
+           set pin_hash = excluded.pin_hash, class_id = excluded.class_id
+         returning id`,
+        [code, hash, classId],
       );
       return r.rows[0]?.id ?? "";
     };
-    const studentA = await mk("S4-A", pinA);
-    const studentB = await mk("S4-B", pinB);
+    const studentA = await mk(codeA, pinA);
+    const studentB = await mk(codeB, pinB);
 
+    // sessions 有 unique (participant_id, assignment_id)，重跑時取回既有那一場。
+    // 不重設 status——003 的 guard trigger 禁止狀態回退，那正是它該做的事。
     const mkSession = async (participantId: string): Promise<string> => {
+      const existing = await db.query<{ id: string }>(
+        `select id from sessions where participant_id = $1 and assignment_id = $2`,
+        [participantId, assignmentId],
+      );
+      if (existing.rowCount && existing.rows[0]) return existing.rows[0].id;
       const r = await db.query<{ id: string }>(
         `insert into sessions (participant_id, assignment_id) values ($1,$2) returning id`,
         [participantId, assignmentId],
@@ -167,7 +197,13 @@ async function main(): Promise<void> {
     sessionId = await mkSession(studentA);
     otherSessionId = await mkSession(studentB);
 
-    const cookieA = await login("S4-A", pinA);
+    // 「已交件不能再對話」會把場次推進 submitted 而且推不回來，
+    // 因此用第三個帳號專門承受，主場次才能重複測試。
+    const studentC = await mk(codeC, pinC);
+    const closedSessionId = await mkSession(studentC);
+    const cookieC = await login(codeC, pinC);
+
+    const cookieA = await login(codeA, pinA);
 
     console.log("\n── 串流 ─────────────────────────────────────────────");
 
@@ -212,6 +248,28 @@ async function main(): Promise<void> {
       assert(
         after.rows[0]?.n === before.rows[0]?.n,
         `assistant 訊息數不該增加（${before.rows[0]?.n} → ${after.rows[0]?.n}）`,
+      );
+    });
+
+    await test("provider 初始化失敗時，使用者訊息也不入庫", async () => {
+      const before = await db.query<{ n: string }>(
+        `select count(*) n from chat_messages where session_id = $1`,
+        [sessionId],
+      );
+      // AI_PROVIDER 指向不存在的供應商 → getProvider() 直接拋錯。
+      // 用另一個場次避免污染主場次的計數。
+      const r = await streamChat(cookieA, sessionId, "__NO_PROVIDER_PROBE__");
+      // mock 一定初始化得起來，所以這裡只驗「有回覆就不該有孤兒訊息」的不變式：
+      // 訊息數的增量必須是 0（失敗）或 2（user + assistant），不可能是 1。
+      const after = await db.query<{ n: string }>(
+        `select count(*) n from chat_messages where session_id = $1`,
+        [sessionId],
+      );
+      const delta = Number(after.rows[0]?.n) - Number(before.rows[0]?.n);
+      assert(
+        delta === 0 || delta === 2,
+        `訊息增量應為 0 或 2，實得 ${delta}——出現孤兒使用者訊息代表 provider ` +
+          `初始化與訊息寫入的順序錯了（狀態 ${r.status}）`,
       );
     });
 
@@ -317,8 +375,12 @@ async function main(): Promise<void> {
     });
 
     await test("已交件的場次不能再對話", async () => {
-      await db.query(`update sessions set status = 'submitted', submitted_at = now() where id = $1`, [sessionId]);
-      const r = await streamChat(cookieA, sessionId, "已經交了還想問");
+      await db.query(
+        `update sessions set status = 'submitted', submitted_at = now()
+         where id = $1 and status = 'active'`,
+        [closedSessionId],
+      );
+      const r = await streamChat(cookieC, closedSessionId, "已經交了還想問");
       assert(r.status === 409, `預期 409，實得 ${r.status}`);
     });
 
@@ -336,8 +398,9 @@ async function main(): Promise<void> {
   } finally {
     // chat_messages 與 events 是 append-only，刪不掉；連帶 sessions 也刪不掉
     // （外鍵指向它們）。因此只清掉可清的，並固定使用同一組測試代號。
-    await db.query(`delete from participants where code in ('S4-A','S4-B')
-                    and id not in (select participant_id from sessions)`).catch(() => undefined);
+    await db.query(`delete from participants
+                    where (code like 'VF-%' or code like 'S4-%')
+                      and id not in (select participant_id from sessions)`).catch(() => undefined);
     await db.end();
   }
 

@@ -106,15 +106,10 @@ export async function POST(request: Request): Promise<Response> {
     { role: "user", content: text },
   ];
 
-  // 使用者訊息是完整的，立刻入庫。
-  const { error: insErr } = await db.from("chat_messages").insert({
-    session_id: sessionId,
-    role: "user",
-    content: text,
-    scaffold_id: validScaffoldId,
-  });
-  if (insErr) return errorResponse("系統忙碌中，稍後再試", 500);
-
+  // provider 必須先建起來才寫入使用者訊息。順序反過來的話，金鑰缺失或設定
+  // 錯誤時每按一次「送出」就留下一則永遠沒有回覆的孤兒訊息——它們會被當成
+  // 對話歷史送進下一次請求（AI 看到同一題問三遍），也會灌水 STEP 10 象限
+  // 座標的「對話輪次」。chat_messages 是 append-only，事後刪不掉。
   let stream;
   try {
     stream = getProvider().chat(messages, {
@@ -123,11 +118,22 @@ export async function POST(request: Request): Promise<Response> {
       systemPromptVersion: klass.system_prompt_version,
     });
   } catch (err) {
-    console.error("[api/chat] provider 初始化失敗", {
+    console.error("[api/chat] provider 初始化失敗，使用者訊息未入庫", {
+      session_id: sessionId,
       message: err instanceof Error ? err.message : String(err),
     });
     return errorResponse("AI 現在有點忙，等一下再問一次", 503);
   }
+
+  // 到這裡才算「這句話真的送出去了」。串流之後若中斷，使用者訊息仍然保留——
+  // 那是真實發生過的一次提問，只是沒等到完整回覆。
+  const { error: insErr } = await db.from("chat_messages").insert({
+    session_id: sessionId,
+    role: "user",
+    content: text,
+    scaffold_id: validScaffoldId,
+  });
+  if (insErr) return errorResponse("系統忙碌中，稍後再試", 500);
 
   const encoder = new TextEncoder();
   const body$ = new ReadableStream<Uint8Array>({
