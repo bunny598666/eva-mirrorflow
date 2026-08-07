@@ -3,26 +3,30 @@
 import { useEffect, useRef } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { startCapture, type CaptureHandle } from "@/lib/events/capture";
 import type { SaveState } from "./SaveStatus";
 
 /**
  * Tiptap 編輯器。
  *
- * STEP 3 只做外框：純文字編輯 + 本機暫存。
- * Provenance Marks（貼上來源歸屬）於 STEP 6、事件記錄於 STEP 5、
- * 快照與回放於 STEP 7 接上——那些都掛在同一個 editor 實例上。
+ * STEP 3 做外框與本機暫存；STEP 5 接上事件擷取（keystroke 打包、大段刪除、
+ * 停頓、焦點切換）。Provenance Marks 於 STEP 6、快照與回放於 STEP 7 接上，
+ * 都掛在同一個 editor 實例上。
  *
  * immediatelyRender: false 是 SSR 必要設定，否則伺服器與用戶端渲染不一致。
  */
 export default function EditorPane({
   sessionId,
   onSaveStateChange,
+  onCaptureReady,
 }: {
   sessionId: string;
   onSaveStateChange: (state: SaveState) => void;
+  onCaptureReady: (capture: CaptureHandle | null) => void;
 }) {
   const draftKey = `mf-draft-${sessionId}`;
   const timer = useRef<number | null>(null);
+  const capture = useRef<CaptureHandle | null>(null);
 
   const editor = useEditor({
     extensions: [StarterKit],
@@ -38,6 +42,8 @@ export default function EditorPane({
       },
     },
     onUpdate: ({ editor: instance }) => {
+      capture.current?.onDocChange();
+
       onSaveStateChange("saving");
       if (timer.current !== null) window.clearTimeout(timer.current);
       timer.current = window.setTimeout(() => {
@@ -51,20 +57,31 @@ export default function EditorPane({
     },
   });
 
-  // 讀回本機暫存稿。這是與外部系統（localStorage）同步，屬於 effect 的正當用途。
+  // 讀回本機暫存稿，然後才啟動事件擷取——順序很重要：
+  // 若先啟動擷取，回復草稿會被當成「學生剛剛打了一整篇」記成一筆巨大的 keystroke_batch。
   useEffect(() => {
     if (!editor) return;
+
     const saved = window.localStorage.getItem(draftKey);
-    if (!saved) return;
-    try {
-      editor.commands.setContent(JSON.parse(saved) as object, { emitUpdate: false });
-      // 畫面上已經有回復的內容，狀態就不該還寫「還沒開始寫」——
-      // 學生看到那句話會以為剛才打的東西沒了。
-      onSaveStateChange("saved");
-    } catch {
-      window.localStorage.removeItem(draftKey);
+    if (saved) {
+      try {
+        editor.commands.setContent(JSON.parse(saved) as object, { emitUpdate: false });
+        onSaveStateChange("saved");
+      } catch {
+        window.localStorage.removeItem(draftKey);
+      }
     }
-  }, [editor, draftKey, onSaveStateChange]);
+
+    const handle = startCapture(sessionId, () => editor.getText());
+    capture.current = handle;
+    onCaptureReady(handle);
+
+    return () => {
+      handle.stop();
+      capture.current = null;
+      onCaptureReady(null);
+    };
+  }, [editor, draftKey, sessionId, onSaveStateChange, onCaptureReady]);
 
   useEffect(() => {
     return () => {

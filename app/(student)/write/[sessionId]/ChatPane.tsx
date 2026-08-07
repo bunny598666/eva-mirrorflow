@@ -22,11 +22,13 @@ export default function ChatPane({
   scaffolds,
   history,
   disabled,
+  onActivity,
 }: {
   sessionId: string;
   scaffolds: ScaffoldButton[];
   history: ChatHistoryItem[];
   disabled: boolean;
+  onActivity: () => void;
 }) {
   const [bubbles, setBubbles] = useState<Bubble[]>(history);
   const [draft, setDraft] = useState("");
@@ -37,6 +39,7 @@ export default function ChatPane({
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   function applyScaffold(button: ScaffoldButton): void {
+    onActivity();
     pendingScaffold.current = button.id;
     setDraft((current) =>
       current.trim() ? `${current.trimEnd()}\n${button.template}` : button.template,
@@ -52,6 +55,7 @@ export default function ChatPane({
     const text = draft.trim();
     if (!text || streaming || disabled) return;
 
+    onActivity();
     const scaffoldId = pendingScaffold.current;
     pendingScaffold.current = null;
 

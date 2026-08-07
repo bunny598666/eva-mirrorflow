@@ -12,6 +12,41 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { badRequest, forbidden, guarded, readJson, str } from "@/lib/api/guard";
 import { EVENT_TYPES, type EventType } from "@/lib/events/types";
 
+/**
+ * 回報該場次目前最大的 client_seq，供用戶端啟動時對齊序號。
+ *
+ * 沒有這一步會漏資料：client_seq 存在 IndexedDB，學生若清除瀏覽器資料或換裝置，
+ * 計數器會從 1 重來，而重複的序號會被下方的 ignoreDuplicates 靜默吃掉——
+ * 那個機制本來是為了冪等重送，在這個情境下卻會讓新事件永遠消失。
+ */
+export async function GET(request: Request): Promise<NextResponse> {
+  return guarded(["student"], async (claims) => {
+    const sessionId = new URL(request.url).searchParams.get("session_id");
+    if (!sessionId) return badRequest("缺少 session_id");
+
+    const db = supabaseAdmin();
+    const { data: owned, error: sErr } = await db
+      .from("sessions")
+      .select("id")
+      .eq("id", sessionId)
+      .eq("participant_id", claims.participant_id)
+      .maybeSingle();
+    if (sErr) throw new Error(sErr.message);
+    if (!owned) return forbidden("這不是你的場次");
+
+    const { data, error } = await db
+      .from("events")
+      .select("client_seq")
+      .eq("session_id", sessionId)
+      .order("client_seq", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ client_seq: number }>();
+    if (error) throw new Error(error.message);
+
+    return NextResponse.json({ max_client_seq: data?.client_seq ?? 0 });
+  });
+}
+
 type IncomingEvent = {
   client_seq: number;
   type: EventType;

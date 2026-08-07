@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { startEventQueue } from "@/lib/events/queue";
+import type { CaptureHandle } from "@/lib/events/capture";
 import AssignmentBrief from "./AssignmentBrief";
 import ChatPane from "./ChatPane";
 import EditorPane from "./EditorPane";
@@ -47,6 +49,19 @@ export default function WriteWorkspace({
   const [percent, setPercent] = useState(40);
   const [pane, setPane] = useState<Pane>("editor");
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const capture = useRef<CaptureHandle | null>(null);
+
+  // 事件送出的背景排程。與外部系統（IndexedDB + 網路）同步，屬 effect 的正當用途。
+  useEffect(() => startEventQueue(sessionId), [sessionId]);
+
+  const onCaptureReady = useCallback((handle: CaptureHandle | null) => {
+    capture.current = handle;
+  }, []);
+
+  // 對話與鷹架也算「有在動」，否則學生跟 AI 討論五分鐘會被誤記成停頓。
+  const onChatActivity = useCallback(() => {
+    capture.current?.noteActivity();
+  }, []);
 
   const splitVars = { ["--split"]: `${percent}%` } as React.CSSProperties;
 
@@ -102,6 +117,7 @@ export default function WriteWorkspace({
               scaffolds={scaffolds}
               history={history}
               disabled={submitted}
+              onActivity={onChatActivity}
             />
           </div>
         </div>
@@ -112,7 +128,11 @@ export default function WriteWorkspace({
           className={`${pane === "editor" ? "flex" : "hidden"} min-h-0 w-full flex-1 lg:flex`}
         >
           <div className="min-h-0 w-full">
-            <EditorPane sessionId={sessionId} onSaveStateChange={setSaveState} />
+            <EditorPane
+              sessionId={sessionId}
+              onSaveStateChange={setSaveState}
+              onCaptureReady={onCaptureReady}
+            />
           </div>
         </div>
       </main>

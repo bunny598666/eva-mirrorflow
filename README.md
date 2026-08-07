@@ -24,6 +24,22 @@ npm run dev
 | `npm run verify:rls` | STEP 1 驗收：RLS 與 append-only 鐵則驗證（單一 transaction，結尾一律 ROLLBACK，零殘留） |
 | `npm run verify:step2` | STEP 2 驗收：認證、路由守衛、反思題目版本凍結（需另開終端機跑 `npm run dev`） |
 | `npm run verify:step4` | STEP 4 驗收：SSE 串流、半截回覆不入庫、鷹架關聯（需以 `AI_PROVIDER=mock npm run dev` 啟動） |
+| `npm run verify:step5 -- --session <id>` | 事件流完整性：序號連續、無重複、型別合法、時間單調 |
+
+### STEP 5 斷線續傳的手動驗收程序
+
+自動化腳本驗不了離線行為（需要真實瀏覽器與 IndexedDB），程序如下：
+
+1. `AI_PROVIDER=mock npm run dev`
+2. 學生登入 → 開始寫作，記下網址列的場次 id
+3. DevTools → Network → 切 **Offline**
+4. 持續打字 30 秒以上，中間停頓幾次
+5. 切回 **Online**，等 5 秒
+6. `npm run verify:step5 -- --session <場次 id>` → 應顯示序號連續、無重複
+
+> `verify-step4.ts` 的冪等測試會刻意寫入 `client_seq=99`，那些測試場次
+> （S4-A / S4-B）會被報成序號缺口。那是測試殘留而非真的遺漏——
+> events 是 append-only 刪不掉。看真實場次即可。
 | `npm run gen:secret` | 產生 `AUTH_JWT_SECRET` |
 | `npm run create:participant -- --code R-01 --role researcher` | 建立帳號。PIN 只印一次，資料庫只存雜湊 |
 
