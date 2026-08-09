@@ -24,8 +24,11 @@ export type CaptureHandle = {
   onDocChange: () => void;
   /** 非編輯類的操作（送出訊息、點鷹架）呼叫，用來重算停頓。 */
   noteActivity: () => void;
-  /** 立刻把累積中的 keystroke 批次送出（交件前呼叫）。 */
-  flushPending: () => void;
+  /**
+   * 立刻把累積中的 keystroke 批次送出（交件前、存快照前呼叫）。
+   * 回傳該批次的 client_seq；沒東西可送則 null。
+   */
+  flushPending: () => Promise<number | null>;
   stop: () => void;
 };
 
@@ -44,7 +47,7 @@ export function startCapture(
     return {
       onDocChange: () => undefined,
       noteActivity: () => undefined,
-      flushPending: () => undefined,
+      flushPending: () => Promise.resolve(null),
       stop: () => undefined,
     };
   }
@@ -64,16 +67,29 @@ export function startCapture(
     maxTimer = null;
   };
 
-  const flushBatch = (): void => {
+  /**
+   * 結清目前累積的批次，終點是 **lastSeenText 而不是 getText()**。
+   *
+   * 這個差別在 STEP 7 才顯形，但它決定回放對不對：delete_block 分支會先呼叫
+   * flushBatch 再單獨記一筆刪除。如果 flushBatch 取的是當下的 getText()，
+   * 那份 patch 已經含了這次刪除，接著 delete_block 的 patch 又刪一次——
+   * 兩份 patch 疊起來重演，文稿就毀了。批次只該記「刪除之前打的那些字」。
+   *
+   * 回傳這批事件的 client_seq（沒東西可送則 null），快照要用它標記
+   * 「這份 doc 反映到第幾號事件」。
+   */
+  const flushBatch = (): Promise<number | null> => {
     clearTimers();
-    const current = getText();
-    if (current === batchBaseline) return;
-    void emitEvent(sessionId, "keystroke_batch", {
-      patch: patchText(batchBaseline, current),
-      before_len: batchBaseline.length,
-      after_len: current.length,
+    if (lastSeenText === batchBaseline) return Promise.resolve(null);
+    const patch = patchText(batchBaseline, lastSeenText);
+    const beforeLen = batchBaseline.length;
+    const afterLen = lastSeenText.length;
+    batchBaseline = lastSeenText;
+    return emitEvent(sessionId, "keystroke_batch", {
+      patch,
+      before_len: beforeLen,
+      after_len: afterLen,
     });
-    batchBaseline = current;
   };
 
   /** 動作發生。若距離上次動作超過門檻，補記一筆停頓（帶真實時長）。 */
@@ -99,7 +115,9 @@ export function startCapture(
     // 大段刪除自成一筆：先把累積中的批次結清，再單獨記錄，
     // 否則刪除會被混進 keystroke_batch 的 patch 裡而看不出來。
     if (removed > CAPTURE.DELETE_BLOCK_CHARS) {
-      flushBatch();
+      // 順序不可調換：先把「刪除之前打的字」結清（終點是刪除前的 lastSeenText），
+      // 再記這次刪除。兩份 patch 首尾相接，重演才接得起來。
+      void flushBatch();
       void emitEvent(sessionId, "delete_block", {
         removed_chars: removed,
         patch: patchText(lastSeenText, current),
@@ -114,9 +132,9 @@ export function startCapture(
 
     // 停頓 1.5 秒送出；但一批最多累積 4 秒，避免連續打字永遠不送。
     if (pauseTimer !== null) window.clearTimeout(pauseTimer);
-    pauseTimer = window.setTimeout(flushBatch, CAPTURE.KEYSTROKE_PAUSE_MS);
+    pauseTimer = window.setTimeout(() => void flushBatch(), CAPTURE.KEYSTROKE_PAUSE_MS);
     if (maxTimer === null) {
-      maxTimer = window.setTimeout(flushBatch, CAPTURE.KEYSTROKE_MAX_MS);
+      maxTimer = window.setTimeout(() => void flushBatch(), CAPTURE.KEYSTROKE_MAX_MS);
     }
   };
 
@@ -128,7 +146,7 @@ export function startCapture(
   const onBlur = (): void => {
     if (stopped) return;
     // 切走前先結清，否則離開這段時間的輸入會被下一批的 baseline 蓋掉。
-    flushBatch();
+    void flushBatch();
     void emitEvent(sessionId, "focus_switch", { to: "away" });
     lastActivityAt = Date.now();
   };
@@ -149,7 +167,7 @@ export function startCapture(
     stop: () => {
       if (stopped) return;
       stopped = true;
-      flushBatch();
+      void flushBatch();
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("focus", onFocus);
     },

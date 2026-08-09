@@ -17,7 +17,8 @@
     "verify:step2": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-step2.ts",
     "verify:step4": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-step4.ts",
     "verify:step5": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-step5.ts",
-    "verify:step6": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/verify-step6.ts"
+    "verify:step6": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/verify-step6.ts",
+    "verify:step7": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/verify-step7.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

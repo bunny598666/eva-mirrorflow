@@ -26,6 +26,7 @@ npm run dev
 | `npm run verify:step4` | STEP 4 驗收：SSE 串流、半截回覆不入庫、鷹架關聯（需以 `AI_PROVIDER=mock npm run dev` 啟動） |
 | `npm run verify:step5 -- --session <id>` | 事件流完整性：序號連續、無重複、型別合法、時間單調 |
 | `npm run verify:step6` | STEP 6 驗收：Provenance Marks。不需 DB／瀏覽器／AI，直接跑得動 |
+| `npm run verify:step7` | STEP 7 驗收：回放引擎（重演終態、5000 事件跳轉、關鍵節點）。同樣不需 DB |
 
 ### STEP 5 斷線續傳的手動驗收程序
 
@@ -55,6 +56,19 @@ npm run dev
    `<span data-mf-origin="ai" data-mf-message-id="…" data-mf-src-start="…">` 裡，
    而**後面自己打的字不在那個 span 裡**（這一點錯了，DNA 條碼就全錯）
 6. 重整頁面再貼一次同一段，仍應判成 `data-mf-origin="ai"`
+
+### STEP 7 的瀏覽器實測程序
+
+`npm run verify:step7` 驗掉回放引擎本身。剩下快照排程需要真瀏覽器：
+
+1. `AI_PROVIDER=mock SNAPSHOT_INTERVAL_MS=12000 SNAPSHOT_EVENT_COUNT=4 npm run dev`
+   （正式環境是 60 秒／200 個事件，測試時調短才不用等）
+2. 學生登入 → 寫幾段字，中間刪掉一大段
+3. 等半分鐘，確認 `snapshots` 表長出好幾列，`seq_event_id` 遞增
+4. 教師登入 → `/session/<場次 id>`：拖時間軸，文稿應隨之變化，
+   拖到最右邊要等於學生的終稿
+5. **災難演練**：DevTools → Application → Local Storage 刪掉 `mf-draft-<場次 id>`，
+   重整寫作頁。文稿應該從**伺服器快照**回來，而不是變成空白
 | `npm run gen:secret` | 產生 `AUTH_JWT_SECRET` |
 | `npm run create:participant -- --code R-01 --role researcher` | 建立帳號。PIN 只印一次，資料庫只存雜湊 |
 
@@ -79,7 +93,7 @@ GitHub `main` 推上去即自動部署。首次設定：
 | `DATABASE_URL` | ❌ | **不要放上 Vercel**。只有本機的驗證與建帳號腳本用得到，應用程式完全不需要 |
 
 3. 資料庫 migration 不會隨部署自動執行。換 Supabase 專案時，需在該專案的 SQL Editor
-   依序執行 `supabase/migrations/` 的 `001` → `005`（`002`～`005` 可重複執行；
+   依序執行 `supabase/migrations/` 的 `001` → `006`（`002`～`006` 可重複執行；
    `001` 若報「already exists」要停下來查，代表表已建過）。
 
 ### 部署前必讀

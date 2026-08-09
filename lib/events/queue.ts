@@ -97,6 +97,21 @@ export async function emitEvent(
   }
 }
 
+/**
+ * 目前已配發到的最大 client_seq（不配新號）。快照用它標記
+ * 「這份 doc 反映到第幾號事件」。
+ */
+export async function peekSeq(sessionId: string): Promise<number> {
+  if (typeof window === "undefined") return 0;
+  try {
+    const db = await database();
+    const current = (await db.get(STORE_META, `seq:${sessionId}`)) as number | undefined;
+    return typeof current === "number" && Number.isFinite(current) ? current : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function pendingCount(sessionId: string): Promise<number> {
   if (typeof window === "undefined") return 0;
   const db = await database();

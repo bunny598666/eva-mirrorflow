@@ -35,6 +35,14 @@ export type WritingContext = {
   assignment: AssignmentSummary;
   scaffolds: ScaffoldButton[];
   history: ChatHistoryItem[];
+  /**
+   * 最後一份快照（含 marks）與它反映到的事件序號。
+   *
+   * 用途是災難復原：本機暫存稿存在 localStorage，學生換裝置、換瀏覽器、
+   * 或家長幫忙清了「網頁資料」就沒了。沒有這條路的話，編輯器會從空白重來，
+   * 而事件流卻接著先前的序號往下長——重演到那裡就會斷掉，那段歷程再也拼不回來。
+   */
+  latestSnapshot: { doc: unknown; clientSeq: number } | null;
 };
 
 export async function listAssignmentsWithProgress(
@@ -98,8 +106,20 @@ export async function loadWritingContext(
     .order("ts", { ascending: true });
   if (hErr) throw new Error(hErr.message);
 
+  const { data: snapshot, error: snErr } = await db
+    .from("snapshots")
+    .select("doc, seq_event_id")
+    .eq("session_id", sessionId)
+    .order("seq_event_id", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ doc: unknown; seq_event_id: number }>();
+  if (snErr) throw new Error(snErr.message);
+
   return {
     session: row,
+    latestSnapshot: snapshot
+      ? { doc: snapshot.doc, clientSeq: Number(snapshot.seq_event_id) }
+      : null,
     assignment: {
       id: assignment.id,
       title: assignment.title,

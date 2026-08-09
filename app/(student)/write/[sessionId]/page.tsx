@@ -1,7 +1,11 @@
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { loadWritingContext } from "@/lib/student/queries";
-import { writingMinutes } from "@/lib/student/config";
+import {
+  snapshotEventCount,
+  snapshotIntervalMs,
+  writingMinutes,
+} from "@/lib/student/config";
 import WriteWorkspace from "./WriteWorkspace";
 
 type Params = { params: Promise<{ sessionId: string }> };
@@ -22,6 +26,9 @@ export default async function WritePage({ params }: Params) {
       orderNo={context.assignment.order_no}
       startedAt={context.session.started_at}
       minutes={writingMinutes()}
+      snapshotIntervalMs={snapshotIntervalMs()}
+      snapshotEventCount={snapshotEventCount()}
+      latestSnapshot={context.latestSnapshot}
       scaffolds={context.scaffolds}
       history={context.history}
       submitted={context.session.status !== "active"}

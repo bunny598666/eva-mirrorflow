@@ -32,6 +32,9 @@ export default function WriteWorkspace({
   orderNo,
   startedAt,
   minutes,
+  snapshotIntervalMs,
+  snapshotEventCount,
+  latestSnapshot,
   scaffolds,
   history,
   submitted,
@@ -42,6 +45,9 @@ export default function WriteWorkspace({
   orderNo: number;
   startedAt: string;
   minutes: number;
+  snapshotIntervalMs: number;
+  snapshotEventCount: number;
+  latestSnapshot: { doc: unknown; clientSeq: number } | null;
   scaffolds: ScaffoldButton[];
   history: ChatHistoryItem[];
   submitted: boolean;
@@ -130,6 +136,9 @@ export default function WriteWorkspace({
           <div className="min-h-0 w-full">
             <EditorPane
               sessionId={sessionId}
+              snapshotIntervalMs={snapshotIntervalMs}
+              snapshotEventCount={snapshotEventCount}
+              latestSnapshot={latestSnapshot}
               onSaveStateChange={setSaveState}
               onCaptureReady={onCaptureReady}
             />
