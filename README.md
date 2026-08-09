@@ -27,6 +27,7 @@ npm run dev
 | `npm run verify:step5 -- --session <id>` | 事件流完整性：序號連續、無重複、型別合法、時間單調 |
 | `npm run verify:step6` | STEP 6 驗收：Provenance Marks。不需 DB／瀏覽器／AI，直接跑得動 |
 | `npm run verify:step7` | STEP 7 驗收：回放引擎（重演終態、5000 事件跳轉、關鍵節點）。同樣不需 DB |
+| `npm run verify:step8` | STEP 8 驗收：DNA 三色歸因（四份構造樣本、θ 邊界、缺損處理）。同樣不需 DB |
 
 ### STEP 5 斷線續傳的手動驗收程序
 
@@ -69,6 +70,22 @@ npm run dev
    拖到最右邊要等於學生的終稿
 5. **災難演練**：DevTools → Application → Local Storage 刪掉 `mf-draft-<場次 id>`，
    重整寫作頁。文稿應該從**伺服器快照**回來，而不是變成空白
+
+### STEP 8 的人工驗收程序（★這一項腳本做不到，必須找人）
+
+驗收條件是「學生版由**非資訊背景成人**測試，10 秒內能說出三色意義」。
+`npm run verify:step8` 驗的是歸因算得對不對，看不看得懂只能靠人。
+
+程序：
+
+1. 找一位沒看過這個系統、也不是資訊背景的成人（家人、同事都可以）
+2. 打開任一份已交件場次的 `/mirror/<場次 id>`，**只給看畫面，不做任何說明**
+3. 計時 10 秒後蓋掉畫面，請對方用自己的話說出藍、綠、橘各代表什麼
+4. 三色全對＝通過。錯任何一色就記下對方**怎麼理解錯的**，那句話比「看不懂」有用得多
+5. 至少測 3 個人。改文案之後要重測，不能拿舊結果充數
+
+> 這一關卡的是研究效度，不是介面美感：學生看錯顏色的意思，寫出來的反思
+> 就是在回答另一個問題，整個 SRL 迴圈的資料都會歪掉。
 | `npm run gen:secret` | 產生 `AUTH_JWT_SECRET` |
 | `npm run create:participant -- --code R-01 --role researcher` | 建立帳號。PIN 只印一次，資料庫只存雜湊 |
 

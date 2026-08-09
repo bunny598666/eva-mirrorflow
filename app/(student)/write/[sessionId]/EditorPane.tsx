@@ -5,7 +5,12 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { startCapture, type CaptureHandle } from "@/lib/events/capture";
 import { emitEvent, peekSeq } from "@/lib/events/queue";
-import { startSnapshots } from "@/lib/replay/snapshot";
+import {
+  captureSnapshot,
+  flushSnapshots,
+  startSnapshots,
+  type SnapshotOptions,
+} from "@/lib/replay/snapshot";
 import { PROVENANCE_EXTENSIONS } from "@/lib/editor/marks";
 import { decidePaste } from "@/lib/editor/paste";
 import { hydrateCopySources } from "@/lib/editor/clipboard";
@@ -53,6 +58,7 @@ export default function EditorPane({
   latestSnapshot,
   onSaveStateChange,
   onCaptureReady,
+  onSnapshotReady,
 }: {
   sessionId: string;
   snapshotIntervalMs: number;
@@ -60,6 +66,8 @@ export default function EditorPane({
   latestSnapshot: StoredDraft | null;
   onSaveStateChange: (state: SaveState) => void;
   onCaptureReady: (capture: CaptureHandle | null) => void;
+  /** 交件前用來強制存下最後一份快照。回傳是否成功送達伺服器。 */
+  onSnapshotReady: (save: (() => Promise<boolean>) | null) => void;
 }) {
   const draftKey = `mf-draft-${sessionId}`;
   const timer = useRef<number | null>(null);
@@ -163,13 +171,19 @@ export default function EditorPane({
 
     // 快照必須在擷取啟動之後才開始：它會先呼叫 flushPending 結清批次，
     // 沒有 capture 就無從結清，doc 與 seq_event_id 會對不上。
-    const stopSnapshots = startSnapshots({
+    const options: SnapshotOptions = {
       sessionId,
       getDoc: () => editor.getJSON(),
       flushPending: () => handle.flushPending(),
       peekSeq: () => peekSeq(sessionId),
       intervalMs: snapshotIntervalMs,
       eventCount: snapshotEventCount,
+    };
+    const stopSnapshots = startSnapshots(options);
+
+    onSnapshotReady(async () => {
+      await captureSnapshot(options);
+      return flushSnapshots(sessionId);
     });
 
     return () => {
@@ -177,6 +191,7 @@ export default function EditorPane({
       handle.stop();
       capture.current = null;
       onCaptureReady(null);
+      onSnapshotReady(null);
     };
   }, [
     editor,
@@ -187,6 +202,7 @@ export default function EditorPane({
     latestSnapshot,
     onSaveStateChange,
     onCaptureReady,
+    onSnapshotReady,
   ]);
 
   useEffect(() => {

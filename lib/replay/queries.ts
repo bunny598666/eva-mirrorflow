@@ -12,6 +12,7 @@ import "server-only";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { docPlainText } from "@/lib/editor/provenance";
 import type { SessionClaims } from "@/lib/auth/types";
+import type { DnaResult } from "@/lib/dna/attribute";
 import type { ReplayAnchor, ReplayEvent } from "./engine";
 
 export type ReplaySession = {
@@ -38,8 +39,10 @@ export type ReplayData = {
    * 而回放只需要文字。marks 留在伺服器，STEP 8 算 DNA 時才用得到。
    */
   anchors: ReplayAnchor[];
-  /** 最後一份快照的完整 doc（含 marks）。沒有快照則 null。 */
-  latestDoc: unknown;
+  /** 最後一份快照的純文字＝終稿。條碼要拿它顯示內容。 */
+  finalText: string;
+  /** 交件時算出的三色歸因。還沒交件則 null。 */
+  dna: DnaResult | null;
 };
 
 /** 讀場次並判斷這位使用者看不看得到。看不到一律回 null，呼叫端 notFound()。 */
@@ -109,6 +112,15 @@ export async function loadReplayData(
   if (sErr) throw new Error(sErr.message);
 
   const rows = (snapshots ?? []) as SnapshotRow[];
+  const latestDoc = rows.length > 0 ? (rows[rows.length - 1]?.doc ?? null) : null;
+
+  const { data: analysis, error: anErr } = await db
+    .from("analyses")
+    .select("result")
+    .eq("session_id", sessionId)
+    .eq("kind", "dna")
+    .maybeSingle<{ result: DnaResult }>();
+  if (anErr) throw new Error(anErr.message);
 
   return {
     session,
@@ -120,6 +132,7 @@ export async function loadReplayData(
       clientSeq: Number(row.seq_event_id),
       text: docPlainText(row.doc),
     })),
-    latestDoc: rows.length > 0 ? (rows[rows.length - 1]?.doc ?? null) : null,
+    finalText: latestDoc ? docPlainText(latestDoc) : "",
+    dna: analysis?.result ?? null,
   };
 }

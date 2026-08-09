@@ -8,6 +8,7 @@ import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { loadReplayData } from "@/lib/replay/queries";
 import SimpleReplay from "./SimpleReplay";
+import StudentDna from "./StudentDna";
 
 type Params = { params: Promise<{ sessionId: string }> };
 
@@ -45,6 +46,9 @@ export default async function MirrorPage({ params }: Params) {
           第 {data.assignmentOrderNo} 次．{data.assignmentTitle}
         </p>
       </header>
+
+      {/* 順序不可調換（CLAUDE.md §4.4）：先看鏡子（DNA），再看歷程回放。 */}
+      {data.dna ? <StudentDna dna={data.dna} text={data.finalText} /> : null}
 
       <SimpleReplay events={data.events} anchors={data.anchors} />
 

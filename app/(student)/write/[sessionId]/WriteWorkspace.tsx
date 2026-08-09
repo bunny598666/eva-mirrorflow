@@ -9,6 +9,7 @@ import EditorPane from "./EditorPane";
 import RemainingTime from "./RemainingTime";
 import SaveStatus, { type SaveState } from "./SaveStatus";
 import SplitHandle from "./SplitHandle";
+import SubmitButton from "./SubmitButton";
 import type { ScaffoldButton } from "@/lib/scaffold/types";
 import type { ChatHistoryItem } from "@/lib/student/queries";
 
@@ -56,6 +57,7 @@ export default function WriteWorkspace({
   const [pane, setPane] = useState<Pane>("editor");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const capture = useRef<CaptureHandle | null>(null);
+  const snapshotNow = useRef<(() => Promise<boolean>) | null>(null);
 
   // 事件送出的背景排程。與外部系統（IndexedDB + 網路）同步，屬 effect 的正當用途。
   useEffect(() => startEventQueue(sessionId), [sessionId]);
@@ -63,6 +65,16 @@ export default function WriteWorkspace({
   const onCaptureReady = useCallback((handle: CaptureHandle | null) => {
     capture.current = handle;
   }, []);
+
+  const onSnapshotReady = useCallback((save: (() => Promise<boolean>) | null) => {
+    snapshotNow.current = save;
+  }, []);
+
+  const getCapture = useCallback(() => capture.current, []);
+  const saveSnapshot = useCallback(
+    () => snapshotNow.current?.() ?? Promise.resolve(false),
+    [],
+  );
 
   // 對話與鷹架也算「有在動」，否則學生跟 AI 討論五分鐘會被誤記成停頓。
   const onChatActivity = useCallback(() => {
@@ -82,6 +94,17 @@ export default function WriteWorkspace({
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-1 text-sm">
           <RemainingTime startedAt={startedAt} minutes={minutes} />
           <SaveStatus state={saveState} />
+          {submitted ? (
+            <span className="text-neutral-600">這次已經交出去了</span>
+          ) : (
+            <span className="ml-auto">
+              <SubmitButton
+                sessionId={sessionId}
+                capture={getCapture}
+                saveSnapshot={saveSnapshot}
+              />
+            </span>
+          )}
         </div>
       </header>
 
@@ -141,6 +164,7 @@ export default function WriteWorkspace({
               latestSnapshot={latestSnapshot}
               onSaveStateChange={setSaveState}
               onCaptureReady={onCaptureReady}
+              onSnapshotReady={onSnapshotReady}
             />
           </div>
         </div>

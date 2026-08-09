@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { loadReplayData } from "@/lib/replay/queries";
+import DnaBarcode from "./DnaBarcode";
 import ReplayViewer from "./ReplayViewer";
 
 type Params = { params: Promise<{ id: string }> };
@@ -32,6 +33,8 @@ export default async function TeacherSessionPage({ params }: Params) {
           回班級總覽
         </Link>
       </header>
+
+      {data.dna ? <DnaBarcode dna={data.dna} text={data.finalText} /> : null}
 
       <ReplayViewer
         events={data.events}
