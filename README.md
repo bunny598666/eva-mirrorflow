@@ -30,6 +30,8 @@ npm run dev
 | `npm run verify:step8` | STEP 8 驗收：DNA 三色歸因（四份構造樣本、θ 邊界、缺損處理）。同樣不需 DB |
 | `npm run verify:step9` | STEP 9 驗收：鏡子迴圈（看過的判準、伺服器端順序防線、recap）。需 `npm run dev` |
 | `npm run verify:step10` | STEP 10 驗收：象限座標與軌跡圖（45×3 效能、SVG 自足性、篩選）。不需 DB |
+| `npm run verify:step11` | STEP 11 驗收：Cohen’s κ（四組手算對照）與編碼資料流。需 `npm run dev` |
+| `npm run kappa -- --a R-01 --b R-02` | 算兩位編碼者的 κ 與分歧清單。加 `--csv 檔名` 匯出分歧 |
 | `npm run gen:secret` | 產生 `AUTH_JWT_SECRET` |
 | `npm run create:participant -- --code R-01 --role researcher` | 建立帳號。PIN 只印一次，資料庫只存雜湊 |
 
@@ -132,6 +134,24 @@ npm run dev
 4. 投稿前若期刊要求嵌入字型，在向量軟體裡把文字轉外框（Create Outlines）即可——
    匯出檔刻意用英文標籤與系統通用字，就是為了讓這一步不會缺字
 
+### STEP 11 的正式編碼流程
+
+1. 幫第二位編碼者建帳號：`npm run create:participant -- --code R-02 --role researcher`
+2. **兩人各自用自己的帳號登入**，到 `/coding` 逐一編碼。
+   `coder_code` 取自登入身分，不是介面上填的——所以不會誤記成別人。
+3. 編碼期間**不要互相看畫面**。介面本身不顯示他人的判定，但坐在旁邊看就破功了。
+4. 兩人都編完同一批場次後：
+
+   ```bash
+   npm run kappa -- --a R-01 --b R-02 --csv 分歧.csv
+   ```
+
+5. 拿分歧清單逐條討論、修訂編碼手冊（＝發新的 scheme 版本），重新編碼再算一次。
+
+> κ 偏低時先看 Po 與邊際分布再下結論。某個向度若九成案例都落在同一類，
+> Po 可能高達 0.9 而 κ 仍接近 0（kappa paradox）——那是類目分布的問題，
+> 不是編碼者不一致。CLI 每一行都同時印出 Po 與 Pe 就是為了讓你看得出來。
+
 ## 部署（Vercel）
 
 GitHub `main` 推上去即自動部署。首次設定：
@@ -154,7 +174,7 @@ GitHub `main` 推上去即自動部署。首次設定：
 | `DATABASE_URL` | ❌ | **不要放上 Vercel**。只有本機的驗證與建帳號腳本用得到，應用程式完全不需要 |
 
 3. 資料庫 migration 不會隨部署自動執行。換 Supabase 專案時，需在該專案的 SQL Editor
-   依序執行 `supabase/migrations/` 的 `001` → `007`（`002`～`007` 可重複執行；
+   依序執行 `supabase/migrations/` 的 `001` → `008`（`002`～`008` 可重複執行；
    `001` 若報「already exists」要停下來查，代表表已建過）。
 
 ### 部署前必讀
