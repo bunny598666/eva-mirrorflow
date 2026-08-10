@@ -1,14 +1,14 @@
-// ★鏡子頁：學生版 DNA 條碼 → 簡化回放 → 反思表單
+// ★鏡子頁：學生版 DNA 條碼 → 簡化回放 → 反思表單（CLAUDE.md §4.4）
 //
-// STEP 7 先接上簡化回放（關鍵節點卡片）。DNA 條碼於 STEP 8、
-// 反思表單與 viewed_dna_at / viewed_replay_at 的記錄於 STEP 9 補上；
-// 屆時順序鎖成「看鏡子 → 回答反思」，不可調換（CLAUDE.md §4.4）。
+// 順序不可調換，而且不是靠版面順序而已：兩個區塊都真的被看過（見 MirrorLoop
+// 的操作型定義）之後，「開始寫想法」才會啟用。viewed_dna_at / viewed_replay_at
+// 是論文方法章用來主張「介入確實發生」的證據。
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/session";
 import { loadReplayData } from "@/lib/replay/queries";
-import SimpleReplay from "./SimpleReplay";
-import StudentDna from "./StudentDna";
+import { loadCurrentPrompt, loadReflection } from "@/lib/reflection/queries";
+import MirrorLoop from "./MirrorLoop";
 
 type Params = { params: Promise<{ sessionId: string }> };
 
@@ -38,6 +38,11 @@ export default async function MirrorPage({ params }: Params) {
     );
   }
 
+  const [prompt, existing] = await Promise.all([
+    loadCurrentPrompt(),
+    loadReflection(sessionId),
+  ]);
+
   return (
     <main className="mx-auto flex min-h-screen max-w-2xl flex-col gap-5 p-6">
       <header>
@@ -47,14 +52,22 @@ export default async function MirrorPage({ params }: Params) {
         </p>
       </header>
 
-      {/* 順序不可調換（CLAUDE.md §4.4）：先看鏡子（DNA），再看歷程回放。 */}
-      {data.dna ? <StudentDna dna={data.dna} text={data.finalText} /> : null}
-
-      <SimpleReplay events={data.events} anchors={data.anchors} />
+      <MirrorLoop
+        sessionId={sessionId}
+        dna={data.dna}
+        finalText={data.finalText}
+        events={data.events}
+        anchors={data.anchors}
+        prompt={prompt}
+        existing={existing}
+      />
 
       <p className="text-sm text-neutral-500">
         這裡只看得到你自己的東西，同學看不到你的，你也看不到同學的。
       </p>
+      <Link href="/" className="self-start text-sm text-neutral-600 underline">
+        回首頁
+      </Link>
     </main>
   );
 }

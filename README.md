@@ -28,6 +28,9 @@ npm run dev
 | `npm run verify:step6` | STEP 6 驗收：Provenance Marks。不需 DB／瀏覽器／AI，直接跑得動 |
 | `npm run verify:step7` | STEP 7 驗收：回放引擎（重演終態、5000 事件跳轉、關鍵節點）。同樣不需 DB |
 | `npm run verify:step8` | STEP 8 驗收：DNA 三色歸因（四份構造樣本、θ 邊界、缺損處理）。同樣不需 DB |
+| `npm run verify:step9` | STEP 9 驗收：鏡子迴圈（看過的判準、伺服器端順序防線、recap）。需 `npm run dev` |
+| `npm run gen:secret` | 產生 `AUTH_JWT_SECRET` |
+| `npm run create:participant -- --code R-01 --role researcher` | 建立帳號。PIN 只印一次，資料庫只存雜湊 |
 
 ### STEP 5 斷線續傳的手動驗收程序
 
@@ -86,8 +89,34 @@ npm run dev
 
 > 這一關卡的是研究效度，不是介面美感：學生看錯顏色的意思，寫出來的反思
 > 就是在回答另一個問題，整個 SRL 迴圈的資料都會歪掉。
-| `npm run gen:secret` | 產生 `AUTH_JWT_SECRET` |
-| `npm run create:participant -- --code R-01 --role researcher` | 建立帳號。PIN 只印一次，資料庫只存雜湊 |
+
+### STEP 9 的瀏覽器實測程序
+
+`npm run verify:step9` 驗掉「看過」的幾何判準、字數規則、伺服器端的順序防線
+與 recap 組裝。剩下兩件事需要真瀏覽器（自動化環境的分頁不合成畫面，
+量不到視窗高度，gate 一定不會開）：
+
+**（一）看鏡子的 gate**
+
+1. `AI_PROVIDER=mock npm run dev`
+2. 學生登入 → 交件 → 自動導到 `/mirror/<場次 id>`
+3. 「開始寫想法」一開始應該是**灰的**，下面兩個項目都是 ○
+4. **快速捲到底再捲回來**：兩個項目仍應是 ○（只是經過不算看過）
+5. 停在文章 DNA 上約 2 秒 → 第一項變 ✓
+6. 捲到「你這次的寫作過程」停約 2 秒 → 第二項變 ✓，按鈕變黑可按
+7. 切到別的分頁再切回來，時間不該偷偷累積
+
+**（二）反思斷網不遺失**
+
+1. 按「開始寫想法」，三題各打超過 30 字
+2. DevTools → Network 切 **Offline**
+3. 按送出 → 應顯示「連不上，你打的字有留著，等一下再按一次」，
+   **畫面上的字不能消失**
+4. 重整頁面（仍離線）→ 重新按開始寫想法，應顯示
+   「幫你留著上次打到一半的內容了」，三題內容都還在
+5. 切回 **Online** 再送出 → 成功，導回首頁
+6. DevTools → Application → IndexedDB → `mirrorflow-reflection`
+   應該已經**清空**（送出成功才刪）
 
 ## 部署（Vercel）
 
@@ -106,11 +135,12 @@ GitHub `main` 推上去即自動部署。首次設定：
 | `SNAPSHOT_INTERVAL_MS` / `SNAPSHOT_EVENT_COUNT` | ✅ | `60000` / `200` |
 | `WRITING_SESSION_MINUTES` | ✅ | `90` |
 | `AI_PROVIDER` | ✅ | `anthropic` |
+| `REFLECTION_PROMPT_VERSION` | ✅ | `v1`。三期凍結，中途不得變動 |
 | `ANTHROPIC_API_KEY` | STEP 4 起 | 之前可留空 |
 | `DATABASE_URL` | ❌ | **不要放上 Vercel**。只有本機的驗證與建帳號腳本用得到，應用程式完全不需要 |
 
 3. 資料庫 migration 不會隨部署自動執行。換 Supabase 專案時，需在該專案的 SQL Editor
-   依序執行 `supabase/migrations/` 的 `001` → `006`（`002`～`006` 可重複執行；
+   依序執行 `supabase/migrations/` 的 `001` → `007`（`002`～`007` 可重複執行；
    `001` 若報「already exists」要停下來查，代表表已建過）。
 
 ### 部署前必讀
