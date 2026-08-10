@@ -18,8 +18,14 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { badRequest, forbidden, guarded, readJson, str } from "@/lib/api/guard";
 import { computeDna, saveDna, NoSnapshotError } from "@/lib/dna/service";
+import { recomputeQuadrantsForAssignment } from "@/lib/metrics/service";
 
-type SessionRow = { id: string; participant_id: string; status: string };
+type SessionRow = {
+  id: string;
+  participant_id: string;
+  status: string;
+  assignment_id: string;
+};
 
 export async function POST(request: Request): Promise<NextResponse> {
   return guarded(["student"], async (claims) => {
@@ -31,7 +37,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const { data: session, error: sErr } = await db
       .from("sessions")
-      .select("id, participant_id, status")
+      .select("id, participant_id, status, assignment_id")
       .eq("id", sessionId)
       .maybeSingle<SessionRow>();
     if (sErr) throw new Error(sErr.message);
@@ -65,6 +71,19 @@ export async function POST(request: Request): Promise<NextResponse> {
       .eq("id", sessionId)
       .eq("status", "active");
     if (uErr) throw new Error(uErr.message);
+
+    // 象限座標（STEP 10）。放在最後，而且失敗不影響交件——
+    // 它是研究者端的分析結果，學生完全看不到（連自己的都不給看，
+    // 因為 z 分數以全班為基準，看到它等同看到全班分布，會污染介入）。
+    // 為了一張研究圖去擋住學生交件是本末倒置；補算隨時可以做。
+    try {
+      await recomputeQuadrantsForAssignment(session.assignment_id);
+    } catch (err) {
+      console.error("[api/submit] 象限座標計算失敗（交件已完成）", {
+        session_id: sessionId,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
 
     return NextResponse.json({ ok: true, ratios: computation.result.ratios });
   });

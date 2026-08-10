@@ -29,6 +29,7 @@ npm run dev
 | `npm run verify:step7` | STEP 7 驗收：回放引擎（重演終態、5000 事件跳轉、關鍵節點）。同樣不需 DB |
 | `npm run verify:step8` | STEP 8 驗收：DNA 三色歸因（四份構造樣本、θ 邊界、缺損處理）。同樣不需 DB |
 | `npm run verify:step9` | STEP 9 驗收：鏡子迴圈（看過的判準、伺服器端順序防線、recap）。需 `npm run dev` |
+| `npm run verify:step10` | STEP 10 驗收：象限座標與軌跡圖（45×3 效能、SVG 自足性、篩選）。不需 DB |
 | `npm run gen:secret` | 產生 `AUTH_JWT_SECRET` |
 | `npm run create:participant -- --code R-01 --role researcher` | 建立帳號。PIN 只印一次，資料庫只存雜湊 |
 
@@ -117,6 +118,19 @@ npm run dev
 5. 切回 **Online** 再送出 → 成功，導回首頁
 6. DevTools → Application → IndexedDB → `mirrorflow-reflection`
    應該已經**清空**（送出成功才刪）
+
+### STEP 10 的人工驗收程序
+
+`npm run verify:step10` 驗掉座標計算、45×3 渲染效能、以及匯出檔的技術完整性
+（標籤成對、無外部 CSS／字型／圖片、無 NaN、標籤為英文）。
+剩下「以向量軟體開啟無破版」只能靠眼睛：
+
+1. 研究者登入 → `/trajectory` → 右上「匯出 SVG」
+2. 用 Illustrator 或 Inkscape 開啟下載的檔案
+3. 確認：箭頭在、三種點形狀分得出來、文字沒有變成豆腐字、
+   放大到 800% 邊緣仍是銳利的（向量而非點陣）
+4. 投稿前若期刊要求嵌入字型，在向量軟體裡把文字轉外框（Create Outlines）即可——
+   匯出檔刻意用英文標籤與系統通用字，就是為了讓這一步不會缺字
 
 ## 部署（Vercel）
 
