@@ -32,6 +32,7 @@ npm run dev
 | `npm run verify:step10` | STEP 10 驗收：象限座標與軌跡圖（45×3 效能、SVG 自足性、篩選）。不需 DB |
 | `npm run verify:step11` | STEP 11 驗收：Cohen’s κ（四組手算對照）與編碼資料流。需 `npm run dev` |
 | `npm run kappa -- --a R-01 --b R-02` | 算兩位編碼者的 κ 與分歧清單。加 `--csv 檔名` 匯出分歧 |
+| `npm run verify:step12` | STEP 12 驗收：匯出（真的解壓、逐檔比對 DB count、去識別化）。需 `npm run dev` |
 | `npm run gen:secret` | 產生 `AUTH_JWT_SECRET` |
 | `npm run create:participant -- --code R-01 --role researcher` | 建立帳號。PIN 只印一次，資料庫只存雜湊 |
 
@@ -152,6 +153,33 @@ npm run dev
 > Po 可能高達 0.9 而 κ 仍接近 0（kappa paradox）——那是類目分布的問題，
 > 不是編碼者不一致。CLI 每一行都同時印出 Po 與 Pe 就是為了讓你看得出來。
 
+### STEP 12 的匯出與釋出
+
+研究者登入 → `/export` → 「產生並下載」，得到一個 zip：
+
+| 檔案 | 內容 |
+|---|---|
+| `events.csv` | 全部歷程事件，payload 以 JSON 字串保留 |
+| `chat.csv` | 對話全文（含 token 數與鷹架關聯） |
+| `dna.json` | 三色歸因，含每個區段的相似度與 Before 原文 |
+| `quadrant.csv` | 象限座標、三個 z 分數、原始值 |
+| `reflections.csv` | 反思（長格式，一題一列，含 viewed_dna_at） |
+| `metrics.csv` | 每場次一列的彙總，直接餵統計軟體 |
+| `manifest.json` | 匯出時間、匯出者、θ、模型、各版本號、筆數、PII 掃描 |
+
+七個檔案的前四欄都是 `session_id / participant_code / order_no / assignment_title`，
+用 `session_id` join 得起來。
+
+**缺失值的寫法**：沒有值的欄位輸出成未加引號的空欄位（R 與 pandas 讀成 `NA`），
+真正的空字串才寫成 `""`。「這件事沒發生」與「他真的留了白」在分析上不同。
+
+> ⚠ **釋出前務必人工通讀 chat.csv 與 reflections.csv。**
+> 系統不存 PII，匯出也只帶 participant code；但那兩個檔案是**學生自己打的字**，
+> 他可能在文章裡寫了自己或同學的名字。manifest 的 `pii_scan` 只掃得到機械樣態
+> （身分證字號、Email、手機、裸學號），姓名、綽號、校名一律掃不出來。
+>
+> 每次匯出都會寫一筆 `export_audit`（誰、何時、幾列、用哪組參數），且不可刪改。
+
 ## 部署（Vercel）
 
 GitHub `main` 推上去即自動部署。首次設定：
@@ -174,7 +202,7 @@ GitHub `main` 推上去即自動部署。首次設定：
 | `DATABASE_URL` | ❌ | **不要放上 Vercel**。只有本機的驗證與建帳號腳本用得到，應用程式完全不需要 |
 
 3. 資料庫 migration 不會隨部署自動執行。換 Supabase 專案時，需在該專案的 SQL Editor
-   依序執行 `supabase/migrations/` 的 `001` → `008`（`002`～`008` 可重複執行；
+   依序執行 `supabase/migrations/` 的 `001` → `009`（`002`～`009` 可重複執行；
    `001` 若報「already exists」要停下來查，代表表已建過）。
 
 ### 部署前必讀
