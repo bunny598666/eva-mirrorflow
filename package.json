@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "db:setup": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file-if-exists=.env.local --experimental-strip-types scripts/db-setup.ts",
     "verify:rls": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-rls.ts",
     "gen:secret": "node --disable-warning=ExperimentalWarning --experimental-strip-types scripts/gen-secret.ts",
     "create:participant": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env.local --experimental-strip-types scripts/create-participant.ts",
@@ -24,6 +25,7 @@
     "verify:step10": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/verify-step10.ts",
     "verify:step11": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-step11.ts",
     "verify:step12": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file-if-exists=.env.local --experimental-strip-types scripts/verify-step12.ts",
+    "loadtest": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file-if-exists=.env.local --experimental-strip-types scripts/load-test.ts",
     "kappa": "node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --env-file-if-exists=.env.local --experimental-strip-types scripts/kappa.ts"
   },
   "dependencies": {

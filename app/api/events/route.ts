@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { badRequest, forbidden, guarded, readJson, str } from "@/lib/api/guard";
 import { EVENT_TYPES, type EventType } from "@/lib/events/types";
+import { ownsSession } from "@/lib/api/session-owner";
 
 /**
  * 回報該場次目前最大的 client_seq，供用戶端啟動時對齊序號。
@@ -24,16 +25,11 @@ export async function GET(request: Request): Promise<NextResponse> {
     const sessionId = new URL(request.url).searchParams.get("session_id");
     if (!sessionId) return badRequest("缺少 session_id");
 
-    const db = supabaseAdmin();
-    const { data: owned, error: sErr } = await db
-      .from("sessions")
-      .select("id")
-      .eq("id", sessionId)
-      .eq("participant_id", claims.participant_id)
-      .maybeSingle();
-    if (sErr) throw new Error(sErr.message);
-    if (!owned) return forbidden("這不是你的場次");
+    if (!(await ownsSession(sessionId, claims.participant_id))) {
+      return forbidden("這不是你的場次");
+    }
 
+    const db = supabaseAdmin();
     const { data, error } = await db
       .from("events")
       .select("client_seq")
@@ -67,17 +63,14 @@ export async function POST(request: Request): Promise<NextResponse> {
       return badRequest(`一次最多 ${MAX_BATCH} 筆事件`);
     }
 
-    const db = supabaseAdmin();
-
     // 只能寫自己的場次——service_role 繞過 RLS，這裡是唯一一道。
-    const { data: owned, error: sErr } = await db
-      .from("sessions")
-      .select("id")
-      .eq("id", sessionId)
-      .eq("participant_id", claims.participant_id)
-      .maybeSingle();
-    if (sErr) throw new Error(sErr.message);
-    if (!owned) return forbidden("這不是你的場次");
+    // 走 lib/api/session-owner.ts 的快取：場次的擁有者寫入後就不會變，
+    // 而這支端點是全系統呼叫最頻繁的（45 人每 4 秒一批）。
+    if (!(await ownsSession(sessionId, claims.participant_id))) {
+      return forbidden("這不是你的場次");
+    }
+
+    const db = supabaseAdmin();
 
     const rows: {
       session_id: string;

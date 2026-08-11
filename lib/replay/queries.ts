@@ -11,6 +11,7 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { docPlainText } from "@/lib/editor/provenance";
+import { fetchAllRows } from "@/lib/supabase/paged";
 import type { SessionClaims } from "@/lib/auth/types";
 import type { DnaResult } from "@/lib/dna/attribute";
 import type { ReplayAnchor, ReplayEvent } from "./engine";
@@ -97,12 +98,16 @@ export async function loadReplayData(
 
   // 依 client_seq 排序而非 ts：ts 是用戶端時鐘，可能被調過；
   // client_seq 是單調的，才是真正的操作順序。
-  const { data: events, error: eErr } = await db
-    .from("events")
-    .select("client_seq, type, payload, ts")
-    .eq("session_id", sessionId)
-    .order("client_seq", { ascending: true });
-  if (eErr) throw new Error(eErr.message);
+  // 分頁：一節課 90 分鐘、每 4 秒一批，單一場次的事件輕易超過 1000 筆。
+  // 不分頁的話回放會在第 1000 筆之後靜靜地停住，而畫面上看不出來。
+  const events = await fetchAllRows<ReplayEvent>((from, to) =>
+    db
+      .from("events")
+      .select("client_seq, type, payload, ts")
+      .eq("session_id", sessionId)
+      .order("client_seq", { ascending: true })
+      .range(from, to),
+  );
 
   const { data: snapshots, error: sErr } = await db
     .from("snapshots")
@@ -127,7 +132,7 @@ export async function loadReplayData(
     participantCode,
     assignmentTitle: assignment?.title ?? "（作業已移除）",
     assignmentOrderNo: assignment?.order_no ?? 0,
-    events: (events ?? []) as ReplayEvent[],
+    events,
     anchors: rows.map((row) => ({
       clientSeq: Number(row.seq_event_id),
       text: docPlainText(row.doc),

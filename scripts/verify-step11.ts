@@ -430,13 +430,13 @@ async function main(): Promise<void> {
       rows.rows.filter((r) => r.coder_code === "R-02").map((r) => ({ unitId: r.session_id, codes: r.codes })),
     );
     check("從資料庫算得出 κ 報告", report.sharedUnits >= 1);
+    // 只斷言**這一個場次**的分歧。資料庫裡會累積前幾輪驗收留下的編碼，
+    // 斷言「總共只有 1 處分歧」會隨著跑過幾次而變動——那種測試遲早會紅，
+    // 而且紅的時候跟程式碼無關。
     const aiUse = report.dimensions.find((d) => d.dimensionId === "ai_use");
-    eq("剛才刻意編不一樣的向度被抓到分歧", aiUse?.disagreements.length, 1);
-    eq(
-      "分歧內容正確",
-      [aiUse?.disagreements[0]?.a, aiUse?.disagreements[0]?.b],
-      ["refinement", "delegation"],
-    );
+    const thisSession = aiUse?.disagreements.find((x) => x.unitId === sessionId);
+    check("剛才刻意編不一樣的向度被抓到分歧", thisSession !== undefined);
+    eq("分歧內容正確", [thisSession?.a, thisSession?.b], ["refinement", "delegation"]);
   } finally {
     await db.end();
   }

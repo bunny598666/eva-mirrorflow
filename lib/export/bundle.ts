@@ -12,6 +12,7 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { toCsv, withBom, type CsvRow } from "./csv";
+import { fetchAllRows } from "@/lib/supabase/paged";
 import { scanPii, type PiiFinding } from "./pii";
 import { dnaThresholds } from "@/lib/dna/config";
 import { DNA_ALGORITHM_VERSION } from "@/lib/dna/service";
@@ -153,17 +154,19 @@ export async function buildExport(researcherCode: string, now: Date): Promise<{
 async function loadContext(): Promise<Context> {
   const db = supabaseAdmin();
 
-  const { data: sessions, error } = await db
-    .from("sessions")
-    .select("id, participant_id, assignment_id, started_at, submitted_at, status")
-    .order("started_at", { ascending: true });
-  if (error) throw new Error(error.message);
+  const sessions = await fetchAllRows<SessionRow>((from, to) =>
+    db
+      .from("sessions")
+      .select("id, participant_id, assignment_id, started_at, submitted_at, status")
+      .order("started_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to),
+  );
 
   // 刻意不 select pin_hash。它不該離開資料庫，連讀出來放在記憶體都不必。
-  const { data: participants, error: pErr } = await db
-    .from("participants")
-    .select("id, code");
-  if (pErr) throw new Error(pErr.message);
+  const participants = await fetchAllRows<{ id: string; code: string }>((from, to) =>
+    db.from("participants").select("id, code").order("code", { ascending: true }).range(from, to),
+  );
 
   const { data: assignments, error: aErr } = await db
     .from("assignments")
@@ -171,10 +174,8 @@ async function loadContext(): Promise<Context> {
   if (aErr) throw new Error(aErr.message);
 
   return {
-    sessions: (sessions ?? []) as SessionRow[],
-    codeOf: new Map(
-      ((participants ?? []) as { id: string; code: string }[]).map((r) => [r.id, r.code]),
-    ),
+    sessions,
+    codeOf: new Map(participants.map((r) => [r.id, r.code])),
     orderOf: new Map(
       ((assignments ?? []) as { id: string; order_no: number }[]).map((r) => [r.id, r.order_no]),
     ),
@@ -185,22 +186,25 @@ async function loadContext(): Promise<Context> {
 }
 
 async function buildEvents(context: Context): Promise<{ csv: string; count: number }> {
-  const { data, error } = await supabaseAdmin()
-    .from("events")
-    .select("session_id, client_seq, type, payload, ts")
-    .order("session_id", { ascending: true })
-    .order("client_seq", { ascending: true });
-  if (error) throw new Error(error.message);
-
-  const bySession = new Map(context.sessions.map((s) => [s.id, s]));
-  const rows: CsvRow[] = [];
-  for (const row of (data ?? []) as {
+  // 分頁：一節課 45 人的事件量遠超過 PostgREST 的 1000 列上限。
+  const data = await fetchAllRows<{
     session_id: string;
     client_seq: number;
     type: string;
     payload: unknown;
     ts: string;
-  }[]) {
+  }>((from, to) =>
+    supabaseAdmin()
+      .from("events")
+      .select("session_id, client_seq, type, payload, ts")
+      .order("session_id", { ascending: true })
+      .order("client_seq", { ascending: true })
+      .range(from, to),
+  );
+
+  const bySession = new Map(context.sessions.map((s) => [s.id, s]));
+  const rows: CsvRow[] = [];
+  for (const row of data) {
     const session = bySession.get(row.session_id);
     if (!session) continue;
     rows.push([
@@ -221,19 +225,7 @@ async function buildEvents(context: Context): Promise<{ csv: string; count: numb
 async function buildChat(
   context: Context,
 ): Promise<{ csv: string; count: number; freeText: string[] }> {
-  const { data, error } = await supabaseAdmin()
-    .from("chat_messages")
-    .select("id, session_id, role, content, scaffold_id, input_tokens, output_tokens, ts")
-    .order("session_id", { ascending: true })
-    .order("ts", { ascending: true });
-  if (error) throw new Error(error.message);
-
-  const bySession = new Map(context.sessions.map((s) => [s.id, s]));
-  const rows: CsvRow[] = [];
-  const freeText: string[] = [];
-  const seenPerSession = new Map<string, number>();
-
-  for (const row of (data ?? []) as {
+  const data = await fetchAllRows<{
     id: string;
     session_id: string;
     role: string;
@@ -242,7 +234,21 @@ async function buildChat(
     input_tokens: number | null;
     output_tokens: number | null;
     ts: string;
-  }[]) {
+  }>((from, to) =>
+    supabaseAdmin()
+      .from("chat_messages")
+      .select("id, session_id, role, content, scaffold_id, input_tokens, output_tokens, ts")
+      .order("session_id", { ascending: true })
+      .order("ts", { ascending: true })
+      .range(from, to),
+  );
+
+  const bySession = new Map(context.sessions.map((s) => [s.id, s]));
+  const rows: CsvRow[] = [];
+  const freeText: string[] = [];
+  const seenPerSession = new Map<string, number>();
+
+  for (const row of data) {
     const session = bySession.get(row.session_id);
     if (!session) continue;
     const index = (seenPerSession.get(row.session_id) ?? 0) + 1;
@@ -283,20 +289,23 @@ async function buildChat(
 }
 
 async function buildDna(context: Context): Promise<{ json: string; count: number }> {
-  const { data, error } = await supabaseAdmin()
-    .from("analyses")
-    .select("session_id, result, rubric_version, analyzed_at")
-    .eq("kind", "dna");
-  if (error) throw new Error(error.message);
-
-  const bySession = new Map(context.sessions.map((s) => [s.id, s]));
-  const records = [];
-  for (const row of (data ?? []) as {
+  const data = await fetchAllRows<{
     session_id: string;
     result: DnaResult;
     rubric_version: string | null;
     analyzed_at: string;
-  }[]) {
+  }>((from, to) =>
+    supabaseAdmin()
+      .from("analyses")
+      .select("session_id, result, rubric_version, analyzed_at")
+      .eq("kind", "dna")
+      .order("session_id", { ascending: true })
+      .range(from, to),
+  );
+
+  const bySession = new Map(context.sessions.map((s) => [s.id, s]));
+  const records = [];
+  for (const row of data) {
     const session = bySession.get(row.session_id);
     if (!session) continue;
     records.push({
@@ -318,20 +327,23 @@ async function buildDna(context: Context): Promise<{ json: string; count: number
 }
 
 async function buildQuadrant(context: Context): Promise<{ csv: string; count: number }> {
-  const { data, error } = await supabaseAdmin()
-    .from("analyses")
-    .select("session_id, result, rubric_version, analyzed_at")
-    .eq("kind", "quadrant");
-  if (error) throw new Error(error.message);
-
-  const bySession = new Map(context.sessions.map((s) => [s.id, s]));
-  const rows: CsvRow[] = [];
-  for (const row of (data ?? []) as {
+  const data = await fetchAllRows<{
     session_id: string;
     result: Record<string, unknown>;
     rubric_version: string | null;
     analyzed_at: string;
-  }[]) {
+  }>((from, to) =>
+    supabaseAdmin()
+      .from("analyses")
+      .select("session_id, result, rubric_version, analyzed_at")
+      .eq("kind", "quadrant")
+      .order("session_id", { ascending: true })
+      .range(from, to),
+  );
+
+  const bySession = new Map(context.sessions.map((s) => [s.id, s]));
+  const rows: CsvRow[] = [];
+  for (const row of data) {
     const session = bySession.get(row.session_id);
     if (!session) continue;
     const z = (row.result.z ?? {}) as Record<string, number>;
@@ -391,10 +403,20 @@ async function buildReflections(
 ): Promise<{ csv: string; count: number; freeText: string[] }> {
   const db = supabaseAdmin();
 
-  const { data, error } = await db
-    .from("reflections")
-    .select("session_id, prompt_version, answers, viewed_dna_at, viewed_replay_at, ts");
-  if (error) throw new Error(error.message);
+  const data = await fetchAllRows<{
+    session_id: string;
+    prompt_version: string;
+    answers: { question_id: string; text: string }[];
+    viewed_dna_at: string;
+    viewed_replay_at: string | null;
+    ts: string;
+  }>((from, to) =>
+    db
+      .from("reflections")
+      .select("session_id, prompt_version, answers, viewed_dna_at, viewed_replay_at, ts")
+      .order("session_id", { ascending: true })
+      .range(from, to),
+  );
 
   const { data: prompts, error: pErr } = await db
     .from("reflection_prompts")
@@ -414,14 +436,7 @@ async function buildReflections(
   const bySession = new Map(context.sessions.map((s) => [s.id, s]));
   const rows: CsvRow[] = [];
   const freeText: string[] = [];
-  for (const row of (data ?? []) as {
-    session_id: string;
-    prompt_version: string;
-    answers: { question_id: string; text: string }[];
-    viewed_dna_at: string;
-    viewed_replay_at: string | null;
-    ts: string;
-  }[]) {
+  for (const row of data) {
     const session = bySession.get(row.session_id);
     if (!session) continue;
     (row.answers ?? []).forEach((answer, index) => {
@@ -473,45 +488,55 @@ async function buildReflections(
 async function buildMetrics(context: Context): Promise<{ csv: string; count: number }> {
   const db = supabaseAdmin();
 
-  const { data: analyses, error } = await db
-    .from("analyses")
-    .select("session_id, kind, result")
-    .in("kind", ["dna", "quadrant"]);
-  if (error) throw new Error(error.message);
-
-  const dnaOf = new Map<string, DnaResult>();
-  const quadrantOf = new Map<string, Record<string, unknown>>();
-  for (const row of (analyses ?? []) as {
+  const analyses = await fetchAllRows<{
     session_id: string;
     kind: string;
     result: Record<string, unknown>;
-  }[]) {
+  }>((from, to) =>
+    db
+      .from("analyses")
+      .select("session_id, kind, result")
+      .in("kind", ["dna", "quadrant"])
+      .order("session_id", { ascending: true })
+      .range(from, to),
+  );
+
+  const dnaOf = new Map<string, DnaResult>();
+  const quadrantOf = new Map<string, Record<string, unknown>>();
+  for (const row of analyses) {
     if (row.kind === "dna") dnaOf.set(row.session_id, row.result as unknown as DnaResult);
     else quadrantOf.set(row.session_id, row.result);
   }
 
-  const { data: counts, error: cErr } = await db
-    .from("events")
-    .select("session_id, type");
-  if (cErr) throw new Error(cErr.message);
+  const counts = await fetchAllRows<{ session_id: string; type: string }>((from, to) =>
+    db
+      .from("events")
+      .select("session_id, type")
+      .order("session_id", { ascending: true })
+      .order("client_seq", { ascending: true })
+      .range(from, to),
+  );
 
   const eventCounts = new Map<string, Map<string, number>>();
-  for (const row of (counts ?? []) as { session_id: string; type: string }[]) {
+  for (const row of counts) {
     const perSession = eventCounts.get(row.session_id) ?? new Map<string, number>();
     perSession.set(row.type, (perSession.get(row.type) ?? 0) + 1);
     eventCounts.set(row.session_id, perSession);
   }
 
-  const { data: reflections, error: rErr } = await db
-    .from("reflections")
-    .select("session_id, answers");
-  if (rErr) throw new Error(rErr.message);
-
-  const reflectionChars = new Map<string, number>();
-  for (const row of (reflections ?? []) as {
+  const reflections = await fetchAllRows<{
     session_id: string;
     answers: { text: string }[];
-  }[]) {
+  }>((from, to) =>
+    db
+      .from("reflections")
+      .select("session_id, answers")
+      .order("session_id", { ascending: true })
+      .range(from, to),
+  );
+
+  const reflectionChars = new Map<string, number>();
+  for (const row of reflections) {
     const total = (row.answers ?? []).reduce(
       (sum, answer) => sum + Array.from(answer.text.trim()).length,
       0,

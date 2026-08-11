@@ -33,6 +33,8 @@ npm run dev
 | `npm run verify:step11` | STEP 11 驗收：Cohen’s κ（四組手算對照）與編碼資料流。需 `npm run dev` |
 | `npm run kappa -- --a R-01 --b R-02` | 算兩位編碼者的 κ 與分歧清單。加 `--csv 檔名` 匯出分歧 |
 | `npm run verify:step12` | STEP 12 驗收：匯出（真的解壓、逐檔比對 DB count、去識別化）。需 `npm run dev` |
+| `npm run loadtest` | STEP 13 壓測：45 人併發跑完整迴圈，量遺漏率／反思成功率／p95 |
+| `npm run db:setup` | 對乾淨的 Supabase 專案套用全部 migration。加 `-- --check` 只檢查不寫入 |
 | `npm run gen:secret` | 產生 `AUTH_JWT_SECRET` |
 | `npm run create:participant -- --code R-01 --role researcher` | 建立帳號。PIN 只印一次，資料庫只存雜湊 |
 
@@ -180,6 +182,51 @@ npm run dev
 >
 > 每次匯出都會寫一筆 `export_audit`（誰、何時、幾列、用哪組參數），且不可刪改。
 
+### STEP 13 壓測
+
+```bash
+npm run build && npm run start          # ⚠ 必須用正式建置，不能用 dev server
+npm run loadtest -- --minutes 30        # 另開終端機
+```
+
+三項驗收：事件遺漏率 0%、反思成功率 100%、`/api/events` p95 < 800ms。
+結果與修正紀錄見 [PILOT_NOTES.md](PILOT_NOTES.md)。
+
+> **`next dev` 的數字不能當驗收。** 同一組程式碼在 dev server 下
+> `/api/events` p95 是 940ms，正式建置是 188ms——量到的是開發工具的成本。
+>
+> **壓測會寫入永遠刪不掉的資料**（events / reflections 是 append-only），
+> 腳本啟動時會要你確認目標資料庫。只對開發用的專案跑。
+>
+> 用 `ALLOW_MOCK_AI=1` 啟動才跑得動對話：mock provider 在
+> `NODE_ENV=production` 下預設拒絕載入，那是防止假 AI 被誤用到真實課堂的鎖。
+
+### 正式研究前的環境準備
+
+開發與正式研究**必須用不同的 Supabase 專案**——events / chat_messages /
+reflections / snapshots / export_audit 都是 append-only，開發期的測試資料
+永遠刪不掉，會一直混在正式資料裡。
+
+新專案的建置：
+
+```bash
+# .env.local 的 DATABASE_URL 指向新專案（port 5432 直連，不要用 6543 pooler）
+npm run db:setup                 # 依序套用全部 migration
+npm run db:setup -- --check      # 確認 13 張表、7 個 trigger、RLS 全部就位
+npm run verify:rls               # 鐵則驗證（單一 transaction，結尾 ROLLBACK）
+```
+
+接著建帳號、在 `/admin` 建立班級與三份作業，最後確認 Vercel 的環境變數
+與本機一致（特別是 `REFLECTION_PROMPT_VERSION` 與兩個 θ）。
+
+### 研究材料的審閱
+
+四份材料（system prompt、反思題目、高階提問規則、編碼架構）散在程式碼與
+資料庫裡。以教師或研究者身分登入 **`/admin/materials`** 可以一次看完並列印，
+直接拿給指導教授。
+
+一旦開始收第一期資料，這四份的版本號就不得變動（CLAUDE.md 鐵則三）。
+
 ## 部署（Vercel）
 
 GitHub `main` 推上去即自動部署。首次設定：
@@ -202,14 +249,14 @@ GitHub `main` 推上去即自動部署。首次設定：
 | `DATABASE_URL` | ❌ | **不要放上 Vercel**。只有本機的驗證與建帳號腳本用得到，應用程式完全不需要 |
 
 3. 資料庫 migration 不會隨部署自動執行。換 Supabase 專案時，需在該專案的 SQL Editor
-   依序執行 `supabase/migrations/` 的 `001` → `009`（`002`～`009` 可重複執行；
-   `001` 若報「already exists」要停下來查，代表表已建過）。
+   執行 `npm run db:setup`（依序套用 `supabase/migrations/` 全部檔案，
+   已存在的會自動略過），再用 `npm run db:setup -- --check` 確認結構完整。
 
 ### 部署前必讀
 
-- **部署後網址是公開的**，登入頁擋在所有東西前面，但 PIN 只有 6 位數字且
-  目前沒有嘗試次數限制。開發期間請在 Vercel 開啟 Deployment Protection；
-  正式課堂前務必補上登入節流（見 `lib/auth/password.ts` 註解）。
+- **部署後網址是公開的。** 登入已有節流（同一代號 10 分鐘內失敗 10 次鎖
+  5 分鐘，以代號為單位、不記 IP），把 6 位數 PIN 的暴力嘗試拉到兩年以上。
+  開發期間仍建議在 Vercel 開啟 Deployment Protection。
 - **開發與正式研究要用不同的 Supabase 專案。** `002` 的 trigger 讓
   events / chat_messages / reflections 永遠無法刪除，開發期的測試資料
   會永久留在該專案裡。

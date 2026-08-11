@@ -10,7 +10,7 @@
 ## 0. 三條不可違反的鐵則
 
 1. **events 表 append-only。** 任何程式碼不得 UPDATE / DELETE events、chat_messages、reflections;資料庫 trigger 強制,應用層同樣不准寫出。研究資料完整性 = 論文可信度。
-2. **零 PII。** 只有 `participants.code`（如 S-07）+ PIN。不存姓名、Email、學號、IP。
+2. **零 PII。** 只有 `participants.code`（如 S-07）+ PIN。不存姓名、Email、學號、IP。登入節流因此以**代號**為單位（`auth_throttle`），不記 IP。
 3. **模型、參數、θ 門檻、反思題目版本全部凍結。** 本方向比方向一多一項：`reflection_prompts` 也有版本欄——三次作業的反思題目必須同版,否則「反思品質的變化」與「題目變了」混淆。
 
 ## 1. 專案身份
@@ -141,6 +141,6 @@ supabase/migrations/
 | 10 | ★軌跡圖（三期象限移動,SVG 可匯出） | ◐ verify-step10.ts 76/76 全綠（45×3 渲染 6.4ms）+ 圖表／篩選／匯出瀏覽器實測（2026-08-10）；**匯出檔待你用向量軟體開一次；高階提問規則待指導教授確認** |
 | 11 | 人工編碼介面 + κ 計算 | ◐ verify-step11.ts 61/61 全綠（κ 與四組手算一致）+ 編碼介面／κ CLI 實測（2026-08-10）。**migration 008 已套用**；**編碼架構 scheme-v1 待指導教授確認** |
 | 12 | 去識別化匯出（含 reflections） | ☑ verify-step12.ts 62/62 全綠（真的解壓、七檔逐一與 DB count 比對、零 PII）+ 匯出實測（2026-08-11）。**migration 009 已套用** |
-| 13 | Pilot:45 併發壓測 + 真實課堂試辦 | ☐ |
+| 13 | Pilot:45 併發壓測 + 真實課堂試辦 | ◐ 45 人×3 分鐘（正式建置）三項驗收全過：遺漏率 0%、反思 100%、/api/events p95 188ms、HTTP 失敗 0/2334（2026-08-11）。壓測中修掉兩個效能缺陷，見 PILOT_NOTES.md。**30 分鐘完整壓測、對 Vercel 網址壓測、真實課堂試辦待你** |
 
 > 各 STEP 完整提示詞與驗收見 `BUILD_PLAN.md` §6。

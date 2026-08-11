@@ -13,6 +13,7 @@
  */
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { fetchAllRows } from "@/lib/supabase/paged";
 import { countHighOrder, QUESTION_RULE_VERSION } from "./questions";
 import {
   computeCohort,
@@ -76,7 +77,7 @@ export async function recomputeQuadrantsForAssignment(
   if (members.length === 0) return [];
 
   const points = computeCohort(members, assignment.order_no);
-  await Promise.all(points.map((point) => saveQuadrant(point)));
+  await saveQuadrants(points);
   return points;
 }
 
@@ -103,16 +104,19 @@ async function loadCodes(participantIds: readonly string[]): Promise<Map<string,
 async function loadUserMessages(
   sessionIds: readonly string[],
 ): Promise<Map<string, string[]>> {
-  const { data, error } = await supabaseAdmin()
-    .from("chat_messages")
-    .select("session_id, content")
-    .in("session_id", [...sessionIds])
-    .eq("role", "user")
-    .order("ts", { ascending: true });
-  if (error) throw new Error(error.message);
+  const data = await fetchAllRows<{ session_id: string; content: string }>((from, to) =>
+    supabaseAdmin()
+      .from("chat_messages")
+      .select("session_id, content")
+      .in("session_id", [...sessionIds])
+      .eq("role", "user")
+      .order("session_id", { ascending: true })
+      .order("ts", { ascending: true })
+      .range(from, to),
+  );
 
   const map = new Map<string, string[]>();
-  for (const row of (data ?? []) as { session_id: string; content: string }[]) {
+  for (const row of data) {
     const list = map.get(row.session_id) ?? [];
     list.push(row.content);
     map.set(row.session_id, list);
@@ -135,17 +139,19 @@ async function loadDna(sessionIds: readonly string[]): Promise<Map<string, DnaRe
   );
 }
 
-async function saveQuadrant(point: QuadrantPoint): Promise<void> {
-  const db = supabaseAdmin();
-  const { data: existing, error: qErr } = await db
-    .from("analyses")
-    .select("id")
-    .eq("session_id", point.sessionId)
-    .eq("kind", "quadrant")
-    .maybeSingle<{ id: string }>();
-  if (qErr) throw new Error(qErr.message);
+/**
+ * 一次寫完整期。
+ *
+ * 原本是每個人「先查有沒有、再 insert 或 update」＝每人 2 次往返。45 人同時
+ * 交件時每次重算都要 90 次往返，累積約 4000 次——實測 /api/submit 的 p50
+ * 是 15.7 秒，而學生就卡在那顆「交出去」按鈕上。
+ *
+ * 靠 011 的 (session_id, kind) 唯一鍵，整期一次 upsert 解決。
+ */
+async function saveQuadrants(points: readonly QuadrantPoint[]): Promise<void> {
+  if (points.length === 0) return;
 
-  const row = {
+  const rows = points.map((point) => ({
     session_id: point.sessionId,
     kind: "quadrant" as const,
     result: {
@@ -159,10 +165,11 @@ async function saveQuadrant(point: QuadrantPoint): Promise<void> {
       question_rule_version: QUESTION_RULE_VERSION,
     },
     rubric_version: METRICS_VERSION,
-  };
+    analyzed_at: new Date().toISOString(),
+  }));
 
-  const { error } = existing
-    ? await db.from("analyses").update(row).eq("id", existing.id)
-    : await db.from("analyses").insert(row);
+  const { error } = await supabaseAdmin()
+    .from("analyses")
+    .upsert(rows, { onConflict: "session_id,kind" });
   if (error) throw new Error(error.message);
 }

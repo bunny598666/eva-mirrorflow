@@ -7,6 +7,7 @@
  */
 import "server-only";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { fetchAllRows } from "@/lib/supabase/paged";
 import { getScheme, sanitize, type CodeAssignment } from "./scheme";
 import type { ReflectionAnswer } from "@/lib/reflection/types";
 
@@ -103,12 +104,14 @@ export async function loadCodingMaterial(
     loadAssignments([session.assignment_id]),
   ]);
 
-  const { data: chat, error: cErr } = await db
-    .from("chat_messages")
-    .select("role, content, ts")
-    .eq("session_id", sessionId)
-    .order("ts", { ascending: true });
-  if (cErr) throw new Error(cErr.message);
+  const chat = await fetchAllRows<CodingMaterial["chat"][number]>((from, to) =>
+    db
+      .from("chat_messages")
+      .select("role, content, ts")
+      .eq("session_id", sessionId)
+      .order("ts", { ascending: true })
+      .range(from, to),
+  );
 
   const { data: annotation, error: aErr } = await db
     .from("coder_annotations")
@@ -126,7 +129,7 @@ export async function loadCodingMaterial(
     participantCode: codes.get(session.participant_id) ?? "?",
     orderNo: assignment?.order_no ?? 0,
     assignmentTitle: assignment?.title ?? "（作業已移除）",
-    chat: (chat ?? []) as CodingMaterial["chat"],
+    chat,
     reflection: await loadReflectionText(sessionId),
     myCodes: sanitize(getScheme(schemeVersion), annotation?.codes),
   };

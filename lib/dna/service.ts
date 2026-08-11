@@ -66,14 +66,7 @@ export async function saveDna(
 ): Promise<void> {
   const db = supabaseAdmin();
 
-  const { data: existing, error: qErr } = await db
-    .from("analyses")
-    .select("id")
-    .eq("session_id", sessionId)
-    .eq("kind", "dna")
-    .maybeSingle<{ id: string }>();
-  if (qErr) throw new Error(qErr.message);
-
+  // 靠 011 的 (session_id, kind) 唯一鍵直接 upsert，省掉「先查再決定」那一趟。
   const row = {
     session_id: sessionId,
     kind: "dna" as const,
@@ -83,9 +76,9 @@ export async function saveDna(
     rubric_version: DNA_ALGORITHM_VERSION,
   };
 
-  const { error } = existing
-    ? await db.from("analyses").update(row).eq("id", existing.id)
-    : await db.from("analyses").insert(row);
+  const { error } = await db
+    .from("analyses")
+    .upsert(row, { onConflict: "session_id,kind" });
   if (error) throw new Error(error.message);
 }
 
